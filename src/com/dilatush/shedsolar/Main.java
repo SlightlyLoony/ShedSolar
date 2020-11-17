@@ -24,7 +24,7 @@ public class Main {
         args = _args;
 
         // get our config...
-        configPath = "config.json";
+        configPath = "configuration.json";
         if( isNotNull( (Object) _args ) && (_args.length > 0) ) configPath = _args[0];
         if( !new File( configPath ).exists() ) {
             System.out.println( "ShedSolar configuration file " + configPath + " does not exist!" );

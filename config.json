@@ -1,7 +1,0 @@
-{
-  "name":"shedsolar",
-  "secret":"OxC/Yt1Ltqh/Gb/IO7j56PZbTDPEBafvUgQcDZsbDKW",
-  "queueSize":100,
-  "cpoHost":"cpo.dilatush.com",
-  "cpoPort":4000
-}
