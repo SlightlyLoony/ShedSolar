@@ -29,6 +29,10 @@ public class Main {
     private String[]    args;
     private Logger      LOGGER;
     private Outbacker   outbacker;
+    private boolean     devMode;
+    TempReader          batteryTempReader;
+    TempReader          ambientTempReader;
+    HeaterActuator      heaterActuator;
 
     private Main( final String[] _args ) {
 
@@ -53,7 +57,7 @@ public class Main {
         config = Config.fromJSONFile( configPath );
 
         // set up a timer for everyone to use...
-        timer = new Timer( "Timer", true );
+        timer = new Timer( "Timer", false );
 
         // get our app set up...
         solarIrradiance = new AtomicReference<Double>();
@@ -63,21 +67,25 @@ public class Main {
         po = new PostOffice( config );
         actor = new ShedSolarActor( po );
 
+        // set up our sensors and actuators...
+        // if in devmode, we use fake sensors and actuators to test the logic
+        // otherwise, we use the real deal
+        batteryTempReader = null;
+        ambientTempReader = null;
+        heaterActuator = null;
+        devMode = config.optBoolean( "devmode", false );
+        if( devMode ) {
 
-        // do nothing...
-        while( true ) {
-            try {
-                Thread.sleep( 1000 );
-            }
-            catch( InterruptedException _e ) {
-                _e.printStackTrace();
-            }
         }
+        else {
+
+        }
+
+        // leaving this method doesn't shut down the process because the Timer started above is NOT on a daemon thread...
     }
 
 
     public static void main( final String[] _args ) {
-
         APP = new Main( _args );
         APP.run();
     }

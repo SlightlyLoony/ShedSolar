@@ -86,17 +86,19 @@ public class Outbacker {
                 conn.disconnect();
 
             } catch( SocketTimeoutException _e ) {
-                // TODO: handle this
-            } catch( IOException e ) {
-                // TODO: handle this
-            } catch( JSONException ex ) {
-                // TODO: handle this
+                LOGGER.log( Level.WARNING, "Socket timed out when reading Outback data", _e );
+                jsonResponse = null;
+            } catch( IOException _e ) {
+                LOGGER.log( Level.SEVERE, "Error when reading Outback data", _e );
+                jsonResponse = null;
+            } catch( JSONException _e ) {
+                LOGGER.log( Level.SEVERE, "Error parsing Outback data", _e );
             }
 
             // if we got a JSON response, post an object with a summary of the response...
             if( jsonResponse != null ) {
                 Main.APP().outbackData = new OutbackData( jsonResponse );
-                hashCode();
+                LOGGER.finest( Main.APP().outbackData.toString() );
             }
         }
     }

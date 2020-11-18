@@ -3,7 +3,9 @@ package com.dilatush.shedsolar;
 import com.dilatush.mop.Actor;
 import com.dilatush.mop.Message;
 import com.dilatush.mop.PostOffice;
+import org.json.JSONException;
 
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -34,9 +36,17 @@ public class ShedSolarActor extends Actor {
 
 
     private void handleWeatherReport( final Message _message ) {
-        LOGGER.finer( "Received Weather minute report message" );
 
-        // extract the current solar power from our weather report message...
-        Main.APP().solarIrradiance.set( _message.getDouble( "solarIrradianceAvg" ) );
+        double sia = 0;
+        try {
+            sia = _message.getDouble( "solarIrradianceAvg" );
+            LOGGER.finer( "Received Weather minute report message, solar irradiance is " + sia );
+        }
+        catch( JSONException _e ) {
+            LOGGER.log( Level.SEVERE, "Problem extracting solar irradiance from weather message: " + _e.getMessage(), _e );
+        }
+
+        // set the current solar power from our weather report message...
+        Main.APP().solarIrradiance.set( sia );
     }
 }
