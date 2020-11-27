@@ -22,6 +22,61 @@ ShedSolar has several dependencies:
 ## Why is ShedSolar's code so awful?
 The author is a retired software and hardware engineer who did this just for fun, and who (so far, anyway) has no code reviewers to upbraid him.  Please feel free to fill in this gap!  You may contact the author at tom@dilatush.com.
 
+## Some implementation notes...
+
+### Hardware
+
+The hardware used in this project, excluding cables and connections, is as follows:
+* One Raspberry Pi 3B+ (with CanaKit wall wart power supply)
+* Two Adafruit 269 thermocouple interfaces (MAX 31855 chip)
+* Two type K thermocouples with 2 meter leads
+* One AOLE ASH-10DA solid state relay (10 amp, 120VAC output, 3 volt input)
+* One Omron LY2-UA-006244 relay
+* Three 5mm LEDs (one green, two red)
+* Three 220 ohm, 1/4 watt resistors
+
+The Raspberry Pi is the heart of the system.  One thermocouple and interface measures the temperature of the batteries (it's placed physically under a battery, where there is no air flow).  The other thermocouple measures the air temperature at the output of the heater; this allows the Raspberry Pi to sense whether the heater is working.  The solid state relay controls the heater.  The electro-mechanical relay senses the output of the solid state relay; this allows the Raspberry Pi to sense whether the solid state relay is working.  The author assumes that the two most likely failure points are (a) the heater, which has moving parts and hot parts, and (b) the solid state relay, simply because it's dealing with power lines.  The LEDs are driving by software, with the following meanings:
+* __Battery Temperature__: a one Hz flashing indicator whose duty cycle indicates the battery temperature: From 0% on to 100% on indicates 0C to 45C, which is the range of temperatures that my solar system batteries (Discover AES 42-48-6650 LiFePO4) may safely be charged.
+* __Heater Power__: this indicator is on when the heater has been turned on.
+* __Status__: A flashing indicator that encodes some simple status information (see __Status Codes__ section below).
+
+### Raspberry Pi I/O Usage
+
+The following I/O pins are used for this project:
+* __GPIO 14 / SCLK__: the SPI clock, to both thermocouple interfaces
+* __GPIO 13 / MISO__: The SPI data in, to both thermocouple interfaces
+* __GPIO 10 / CE0__: The SPI chip enable 0, to the battery thermocouple interface
+* __GPIO 11 / CE1__: The SPI chip enable 1, to the heater thermocouple interface
+* __GPIO 0__: Sense relay (pulled high, low means SSR is outputting 120VAC)
+* __GPIO 2__: Battery Temperature LED (red), low is on
+* __GPIO 3__: Heater Power LED (red), low is on
+* __GPIO 4__: Status LED (green), low is on
+* __GPIO 5__: Heater SSR, low is on
+
+### Status codes
+
+These are the codes displayed by the status indicator.  There may be multiple status codes, in which case the status indicator will be off briefly between the codes.  Once all the codes have been displayed, the status indicator will be off for a longer pause, then start over again.  A short flash on indicates a zero, a long flash a one.  The codes it can display are shown below.  They are transmitted MSB first.
+
+| Code   | Status |
+| :------| :---|
+| 0      | Ok - no problems detected|
+| 10     | Batteries undertemperature|
+| 11     | Batteries overtemperature|
+| 00     | Barn router unreachable|
+| 01     | Shed router unreachable|
+| 000    | Internet unreachable|
+| 110    | Solid state relay failure|
+| 111    | Heater failure|
+| 1100   | Weather reports not being received|
+| 1101   | Outback MATE3S not responding|
+| 0000   | Battery thermocouple open circuit|
+| 0001   | Battery thermocouple shorted to Vcc|
+| 0010   | Battery thermocouple shorted to ground|
+| 0100   | Heater thermocouple open circuit|
+| 0101   | Heater thermocouple shorted to Vcc|
+| 0110   | Heater thermocouple shorted to ground|
+
+
 ## How is ShedSolar licensed?
 MOP is licensed with the quite permissive MIT license:
 > Created: November 16, 2020<br>

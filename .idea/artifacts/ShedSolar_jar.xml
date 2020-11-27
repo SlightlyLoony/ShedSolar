@@ -1,0 +1,13 @@
+<component name="ArtifactManager">
+  <artifact type="jar" build-on-make="true" name="ShedSolar:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/ShedSolar</output-path>
+    <root id="archive" name="ShedSolar.jar">
+      <element id="module-output" name="ShedSolar" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/../Util/out/artifacts/Util/Util.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/../MOP/out/artifacts/MOP.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/pi4j-core.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/pi4j-device.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/pi4j-gpio-extension.jar" path-in-jar="/" />
+    </root>
+  </artifact>
+</component>

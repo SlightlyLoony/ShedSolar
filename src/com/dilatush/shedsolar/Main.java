@@ -2,6 +2,7 @@ package com.dilatush.shedsolar;
 
 import com.dilatush.mop.PostOffice;
 import com.dilatush.util.Config;
+import com.dilatush.util.syncevents.SynchronousEvents;
 
 import java.io.File;
 import java.util.Timer;
@@ -24,15 +25,15 @@ public class Main {
     public AtomicReference<Double> solarIrradiance;               // the most recent solar irradiance value, set from ShedSolarActor...
     public OutbackData             outbackData;                   // the most recent data from the Outback solar system, set from Outbacker...
 
-    private Config      config;
-    private String      configPath;
-    private String[]    args;
-    private Logger      LOGGER;
-    private Outbacker   outbacker;
-    private boolean     devMode;
-    TempReader          batteryTempReader;
-    TempReader          ambientTempReader;
-    HeaterActuator      heaterActuator;
+    private Config              config;
+    private String              configPath;
+    private String[]            args;
+    private Logger              LOGGER;
+    private Outbacker           outbacker;
+    private SynchronousEvents   events;
+    private TempReader          batteryTempReader;
+    private TempReader          ambientTempReader;
+    private HeaterActuator      heaterActuator;
 
     private Main( final String[] _args ) {
 
@@ -41,6 +42,9 @@ public class Main {
         // set the configuration file location (must do before any logging actions occur)...
         System.getProperties().setProperty( "java.util.logging.config.file", "logging.properties" );
         LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getSimpleName() );
+
+        // set the maximum number of queued events to 1000...
+        System.getProperties().setProperty( "com.dilatush.util.syncevents.max_capacity", "1000" );
     }
 
 
@@ -59,6 +63,9 @@ public class Main {
         // set up a timer for everyone to use...
         timer = new Timer( "Timer", false );
 
+        // start our events system...
+        events = SynchronousEvents.getInstance();
+
         // get our app set up...
         solarIrradiance = new AtomicReference<Double>();
         outbacker = new Outbacker( config.getString( "outback" ) );
@@ -68,17 +75,20 @@ public class Main {
         actor = new ShedSolarActor( po );
 
         // set up our sensors and actuators...
-        // if in devmode, we use fake sensors and actuators to test the logic
-        // otherwise, we use the real deal
         batteryTempReader = null;
         ambientTempReader = null;
         heaterActuator = null;
-        devMode = config.optBoolean( "devmode", false );
-        if( devMode ) {
 
+        // are we running in assembly test mode or for reals?
+        if( config.optBoolean( "assemblyTest", false ) ) {
+            LOGGER.info( "Running in assembly test mode" );
+            AssemblyTest at = new AssemblyTest();
+            at.run();
         }
-        else {
 
+        // this runs if for reals...
+        else {
+            LOGGER.info( "Running in production mode..." );
         }
 
         // leaving this method doesn't shut down the process because the Timer started above is NOT on a daemon thread...
