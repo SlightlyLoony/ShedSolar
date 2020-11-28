@@ -35,18 +35,18 @@ public class AssemblyTest {
             // the LEDs...
             GpioPinDigitalOutput batteryTempLED = controller.provisionDigitalOutputPin( RaspiPin.GPIO_02, "Battery Temperature LED", PinState.HIGH );
             batteryTempLED.setShutdownOptions( true, PinState.HIGH );
-            GpioPinDigitalOutput heaterPowerLED = controller.provisionDigitalOutputPin( RaspiPin.GPIO_02, "Heater Power LED", PinState.HIGH );
+            GpioPinDigitalOutput heaterPowerLED = controller.provisionDigitalOutputPin( RaspiPin.GPIO_03, "Heater Power LED", PinState.HIGH );
             heaterPowerLED.setShutdownOptions( true, PinState.HIGH );
-            GpioPinDigitalOutput statusLED = controller.provisionDigitalOutputPin( RaspiPin.GPIO_02, "Status LED", PinState.HIGH );
+            GpioPinDigitalOutput statusLED = controller.provisionDigitalOutputPin( RaspiPin.GPIO_04, "Status LED", PinState.HIGH );
             statusLED.setShutdownOptions( true, PinState.HIGH );
 
             // the heater's solid state relay...
-            GpioPinDigitalOutput heaterSSR = controller.provisionDigitalOutputPin( RaspiPin.GPIO_02, "Heater SSR", PinState.HIGH );
+            GpioPinDigitalOutput heaterSSR = controller.provisionDigitalOutputPin( RaspiPin.GPIO_05, "Heater SSR", PinState.HIGH );
             heaterSSR.setShutdownOptions( true, PinState.HIGH );
 
             // setup our SPI channels...
             SpiDevice batteryTemp = SpiFactory.getInstance( SpiChannel.CS0, SpiDevice.DEFAULT_SPI_SPEED, SpiDevice.DEFAULT_SPI_MODE );
-            SpiDevice heaterTemp  = SpiFactory.getInstance( SpiChannel.CS0, SpiDevice.DEFAULT_SPI_SPEED, SpiDevice.DEFAULT_SPI_MODE );
+            SpiDevice heaterTemp  = SpiFactory.getInstance( SpiChannel.CS1, SpiDevice.DEFAULT_SPI_SPEED, SpiDevice.DEFAULT_SPI_MODE );
 
             // now we just loop forever, exercising everything...
             long count = 0;
@@ -97,14 +97,15 @@ public class AssemblyTest {
         // we write four bytes (which are ignored by the device), to read four...
         byte[] readData = _spi.write( data );
 
-        // if we didn't get four bytes, there's a problem...
-        if( readData.length != 4 )
+        // if we didn't get at least four bytes, there's a problem...
+        if( readData.length < 4 ) {
             throw new IllegalStateException( "Read temperature got " + readData.length + " bytes, instead of 4" );
+        }
 
         // get our result...
         TempResult result = new TempResult();
-        int ref = (((readData[2] << 8) | readData[3]) >> 4);
-        int tc =  (((readData[0] << 8) | readData[1]) >> 2);
+        int ref = (((readData[2] << 8) | (0xFF & readData[3])) >> 4);
+        int tc =  (((readData[0] << 8) | (0xFF & readData[1])) >> 2);
         result.thermocoupleTemp = tc / 4.0f;
         result.referenceTemp = ref / 16.0f;
         result.fault    = (readData[1] & 0x01) != 0;
@@ -112,7 +113,20 @@ public class AssemblyTest {
         result.scgFault = (readData[3] & 0x02) != 0;
         result.ocFault  = (readData[3] & 0x01) != 0;
 
+        LOGGER.info( bytesToString( readData ) );
+
         return result;
+    }
+
+
+    private String bytesToString( final byte[] _bytes ) {
+        StringBuilder sb = new StringBuilder();
+        for( byte thisByte : _bytes ) {
+            if( sb.length() > 0 )
+                sb.append( ' ' );
+            sb.append( String.format( "%02X", thisByte ) );
+        }
+        return sb.toString();
     }
 
 
