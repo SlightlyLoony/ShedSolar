@@ -47,6 +47,6 @@ public class ShedSolarActor extends Actor {
         }
 
         // set the current solar power from our weather report message...
-        Main.APP().solarIrradiance.set( sia );
+        // TODO: with events
     }
 }

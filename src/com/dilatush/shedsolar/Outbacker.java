@@ -30,7 +30,6 @@ public class Outbacker {
     public Outbacker( final String _host ) {
         host = _host;
         url = getURL();
-        Main.APP().timer.schedule( new OutbackerTask(), 0, 30000 );
     }
 
 
@@ -97,8 +96,9 @@ public class Outbacker {
 
             // if we got a JSON response, post an object with a summary of the response...
             if( jsonResponse != null ) {
-                Main.APP().outbackData = new OutbackData( jsonResponse );
-                LOGGER.finest( Main.APP().outbackData.toString() );
+                // TODO: put actual logic in here...
+//                Main.APP().outbackData = new OutbackData( jsonResponse );
+//                LOGGER.finest( Main.APP().outbackData.toString() );
             }
         }
     }
