@@ -1,5 +1,12 @@
 package com.dilatush.shedsolar;
 
+import com.dilatush.shedsolar.events.OutbackFailure;
+import com.dilatush.shedsolar.events.OutbackReading;
+import com.dilatush.util.Config;
+import com.dilatush.util.syncevents.SynchronousEvent;
+import com.dilatush.util.syncevents.SynchronousEvents;
+import com.dilatush.util.test.ATestInjector;
+import com.dilatush.util.test.TestInjector;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -25,11 +32,16 @@ public class Outbacker {
 
     private final String host;
     private final URL url;
+    private final TestException testException;
 
 
-    public Outbacker( final String _host ) {
-        host = _host;
+    public Outbacker( final Config _config ) {
+        host = _config.getStringDotted( "outback.host" );
+        long interval = _config.optLongDotted( "outback.interval", 60000 );
         url = getURL();
+        App.instance.timer.schedule( new OutbackerTask(), 0, interval );
+        testException = new TestException();
+        App.instance.orchestrator.registerTestInjector( testException, "Outbacker.readError" );
     }
 
 
@@ -69,10 +81,14 @@ public class Outbacker {
                     throw new RuntimeException( "Failed : HTTP error code : " + conn.getResponseCode() );
                 }
 
+                // test injection...
+                if( testException.inject( null ) )
+                    throw new SocketTimeoutException( "Test" );
+
                 BufferedReader br = new BufferedReader( new InputStreamReader(
                         (conn.getInputStream()) ) );
 
-                String jrs = null;
+                String jrs;
                 StringBuilder jsonResponseString = new StringBuilder();
                 do {
                     jrs = br.readLine();
@@ -94,12 +110,19 @@ public class Outbacker {
                 LOGGER.log( Level.SEVERE, "Error parsing Outback data", _e );
             }
 
-            // if we got a JSON response, post an object with a summary of the response...
-            if( jsonResponse != null ) {
-                // TODO: put actual logic in here...
-//                Main.APP().outbackData = new OutbackData( jsonResponse );
-//                LOGGER.finest( Main.APP().outbackData.toString() );
-            }
+            // publish an event to tell the world what happened...
+            SynchronousEvent event = (jsonResponse != null) ? new OutbackReading( new OutbackData( jsonResponse ) ) : new OutbackFailure();
+            SynchronousEvents.getInstance().publish( event );
+            LOGGER.fine( event.toString() );
+        }
+    }
+
+
+    private static class TestException extends ATestInjector<Boolean> implements TestInjector<Boolean> {
+
+        @Override
+        public Boolean inject( final Boolean _o ) {
+            return enabled;
         }
     }
 }

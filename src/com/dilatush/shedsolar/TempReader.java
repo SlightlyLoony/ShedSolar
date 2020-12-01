@@ -5,6 +5,7 @@ import com.dilatush.shedsolar.events.BatteryTemperatureEvent;
 import com.dilatush.shedsolar.events.HeaterTemperatureEvent;
 import com.dilatush.util.syncevents.SynchronousEvent;
 import com.dilatush.util.syncevents.SynchronousEvents;
+import com.dilatush.util.test.ATestInjector;
 import com.pi4j.io.spi.SpiChannel;
 import com.pi4j.io.spi.SpiDevice;
 import com.pi4j.io.spi.SpiFactory;
@@ -59,6 +60,9 @@ public class TempReader extends TimerTask {
     private int lastRawBatteryTemp;
     private int lastRawHeaterTemp;
 
+    private final TempReadTest batteryTest = new TempReadTest();
+    private final TempReadTest heaterTest = new TempReadTest();
+
 
     public TempReader( final int _maxRetries, final int _minStableReads ) throws IOException {
 
@@ -72,6 +76,10 @@ public class TempReader extends TimerTask {
         // we have no last readings to start with...
         lastRawBatteryTemp = -1;
         lastRawHeaterTemp = -1;
+
+        // register our tests...
+        App.instance.orchestrator.registerTestInjector( batteryTest, "TempReader.readBattery" );
+        App.instance.orchestrator.registerTestInjector( heaterTest,  "TempReader.readHeater" );
     }
 
 
@@ -82,8 +90,8 @@ public class TempReader extends TimerTask {
     public void run() {
 
         // get raw readings from both thermocouples...
-        int rawBattery = getRaw( batteryTemp, lastRawBatteryTemp, "Battery" );
-        int rawHeater  = getRaw( heaterTemp,  lastRawHeaterTemp,  "Heater"  );
+        int rawBattery = batteryTest.inject( getRaw( batteryTemp, lastRawBatteryTemp, "Battery" ) );
+        int rawHeater  = heaterTest.inject(  getRaw( heaterTemp,  lastRawHeaterTemp,  "Heater"  ) );
 
         // remember these readings for next time around...
         lastRawBatteryTemp = rawBattery;
@@ -203,6 +211,24 @@ public class TempReader extends TimerTask {
         catch( IOException _e ) {
             LOGGER.log( Level.SEVERE, "Error when reading SPI device " + _name, _e );
             return IO_ERROR_MASK;
+        }
+    }
+
+
+    private static class TempReadTest extends ATestInjector<Integer> {
+
+        private int testPattern;
+
+        @Override
+        public void set( final Object _testPattern ) {
+            super.set( _testPattern );
+            testPattern = Integer.decode( (String) _testPattern );
+        }
+
+
+        @Override
+        public Integer inject( final Integer _int ) {
+            return enabled ? testPattern | _int : _int;
         }
     }
 }

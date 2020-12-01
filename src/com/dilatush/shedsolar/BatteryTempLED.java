@@ -1,6 +1,7 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.shedsolar.events.BatteryTemperatureEvent;
+import com.dilatush.util.Config;
 import com.dilatush.util.syncevents.SubscribeEvent;
 import com.dilatush.util.syncevents.SubscriptionDefinition;
 import com.dilatush.util.syncevents.SynchronousEvent;
@@ -12,49 +13,85 @@ import com.pi4j.io.gpio.RaspiPin;
 import java.util.TimerTask;
 
 /**
+ * <p>Controls the battery temperature LED.</p>
+ * <p>This LED normally flashes at a fixed interval, but the duty cycle of the flash is proportional to the battery temperature.  The duty cycle is 0%
+ * (LED completely off) when the battery is at or below the lowest operable temperture, and is 100% (LED completely on) when the battery is at or
+ * above its highest operable temperature.</p>
+ * <p>If the battery temperature cannot be read for any reason, the LED flashes very quickly at a constant rate.</p>
+ *
  * @author Tom Dilatush  tom@dilatush.com
  */
 public class BatteryTempLED {
 
-    private final static float LO = 0;
-    private final static float HI = 45.0f;
-    private final static long DURATION = 1000;
+    private final float minTemp;
+    private final float maxTemp;
+    private final long normalInterval;
+    private final long errorInterval;
 
     private final GpioPinDigitalOutput led;
     private float batteryTemp;
-    private boolean badBatteryTemp;
+    private boolean goodBatteryTemp;
     private boolean started;
 
-    public BatteryTempLED() {
+
+    /**
+     * Creates a new instance of this class, configured by the given configuration file.
+     *
+     * @param _config the configuration file for this app
+     */
+    public BatteryTempLED( final Config _config ) {
+
+        // get our configuration...
+        minTemp        = _config.optFloatDotted( "batteryTemperatureLED.minTemp",         0.0f );
+        maxTemp        = _config.optFloatDotted( "batteryTemperatureLED.maxTemp",        45.0f );
+        normalInterval = _config.optLongDotted(  "batteryTemperatureLED.normalInterval", 2000  );
+        errorInterval  = _config.optLongDotted(  "batteryTemperatureLED.errorInterval",   400  );
+
         batteryTemp = 0;
         started = false;
+
+        // set up our GPIO pin...
         led = App.instance.gpio.provisionDigitalOutputPin( RaspiPin.GPIO_02, "Battery Temperature", PinState.HIGH );
+        led.setShutdownOptions( true, PinState.HIGH );
+
+        // subscribe to battery temperature readings...
         SynchronousEvents.getInstance().publish(
                 new SubscribeEvent( new SubscriptionDefinition( this::handleBatteryTempEvent, BatteryTemperatureEvent.class ) )
         );
     }
 
 
+    /**
+     * Handle the battery temperature event that the constructor subscribed us to.
+     *
+     * @param _event the battery temperature event
+     */
     public void handleBatteryTempEvent( final SynchronousEvent _event ) {
+
         BatteryTemperatureEvent be = (BatteryTemperatureEvent) _event;
-        badBatteryTemp = !be.goodMeasurement;
-        if( !badBatteryTemp ) {
-            batteryTemp = be.degreesC;
-            if( !started ) {
-                started = true;
-                new On().run();
-            }
-        }
-        else {
-            // TODO handle fast flash here...
+
+        // record our latest battery temperature information...
+        goodBatteryTemp = be.goodMeasurement;
+        batteryTemp = be.degreesC;
+
+        // if we haven't yet started the LED flashing, do so now...
+        if( !started ) {
+            started = true;
+            new On().run();
         }
     }
 
 
+    /**
+     * Computes the duration (in milliseconds) for the "on" portion of the battery temperature LED when there is a valid temperature reading.
+     *
+     * @param _temp the battery temperature in degrees Celcius
+     * @return the "on" duration in milliseconds
+     */
     private long onMS( final float _temp ) {
-        if( _temp <= LO ) return 0;
-        if( _temp >= HI ) return 1000;
-        return (long) (DURATION * (_temp - LO) / (HI - LO));
+        if( _temp <= minTemp ) return 0;
+        if( _temp >= maxTemp ) return normalInterval;
+        return Math.round( normalInterval * ((_temp - minTemp) / (maxTemp - minTemp)) );
     }
 
 
@@ -67,12 +104,13 @@ public class BatteryTempLED {
         public void run() {
             led.setState( PinState.LOW );
 
-            if( !badBatteryTemp ) {
+            if( goodBatteryTemp ) {
                 App.instance.timer.schedule( new Off(), onMS( batteryTemp ) );
-                App.instance.timer.schedule( new On(), DURATION );
+                App.instance.timer.schedule( new On(), normalInterval );
             }
             else {
-                // TODO: handle fast flash here...
+                App.instance.timer.schedule( new Off(), errorInterval / 2 );
+                App.instance.timer.schedule( new On(), errorInterval );
             }
         }
     }

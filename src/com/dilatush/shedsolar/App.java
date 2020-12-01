@@ -1,6 +1,7 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.util.Config;
+import com.dilatush.util.test.TestOrchestrator;
 import com.pi4j.io.gpio.GpioController;
 import com.pi4j.io.gpio.GpioFactory;
 
@@ -17,27 +18,34 @@ public class App {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
-    public static App           instance;
-    public Timer          timer;
-    public GpioController gpio;
+    public static App       instance;
+    public Timer            timer;
+    public GpioController   gpio;
+    public TestOrchestrator orchestrator;
 
     private BatteryTempLED batteryTempLED;
-    private Config config;
+    private Outbacker      outbacker;
+    private final Config config;
 
     private App( final Config _config ) {
-        config = _config;
-    }
-
-    public void run() {
 
         // set up a timer for all to use, in a non-daemon thread...
         timer = new Timer( "Timer", false );
+
+        config = _config;
+        orchestrator = new TestOrchestrator( timer );
+    }
+
+    public void run() {
 
         // get a GPIO controller...
         gpio = GpioFactory.getInstance();
 
         // set up our battery temperature LED...
-        batteryTempLED = new BatteryTempLED();
+        batteryTempLED = new BatteryTempLED( config );
+
+        // set up our Outback interrogator...
+        outbacker = new Outbacker( config );
 
         try {
 
@@ -46,6 +54,9 @@ public class App {
             int  minStableReads = config.optIntDotted(  "temperatureSensor.minStableReads", 3    );
             long intervalMS     = config.optLongDotted( "temperatureSensor.intervalMS",     5000 );
             timer.schedule( new TempReader( maxRetries, minStableReads ), 0, intervalMS );
+
+            // start up our test orchestration...
+            orchestrator.schedule( config );
         }
 
         // if we get ANY exception during the app startup, we consider it to be fatal...
@@ -53,8 +64,6 @@ public class App {
             LOGGER.log( Level.SEVERE, "Exception during App startup", _e );
             System.exit( 1 );
         }
-
-
     }
 
 
