@@ -1,12 +1,12 @@
-<h1 align="center"><b>ShedSolar</b></h1>
-<h2 align="center">Monitoring System for Solar System</h2>
-<h3 align="center"><i>Tom Dilatush</i></h3>
+<h1 style="text-align: center"><b>ShedSolar</b></h1>
+<h2 style="text-align: center">Monitoring System for Solar System</h2>
+<h3 style="text-align: center"><i>Tom Dilatush</i></h3>
 
 ## What is ShedSolar?
 *ShedSolar* is a program that provides several services related to the Outback solar system that I have installed in my shed:
 * Controls the temperature of the batteries.  My system has three Discover AES 7.4KWH LiFePO4 batteries.  These batteries cannot be charged if their temperature is below 0C (32F), and they are not in a heated building.  Here in our high northern Utah valley we routinely see temperatures as low as -15C (0F), so my system's batteries are inside an insulated box with a 200W heater.  *ShedSolar* will sense the battery temperature and turn the heater on as required to keep the battery temperature at an appropriate level.  During hours when the sun is shining (and the batteries can therefore be charged), the battery temperature will be kept within the range of 15C to 18C (60F to 65F).  Otherwise, the range will drop to 0C to 3C (32F to 37F) to the heater power requirements.  It obtains the sunlight level from my weather system, which directly senses solar power with a pyrometer.  The total time that the heater is powered on is tracked internally.
 * Monitors the temperature of the batteries, providing alarm events for under-temperature (<0C, which might occur on heater failure) or over-temperature (>45C, which might occur if the batteries generate too much heat when the ambient temperature is high).
-* Interrogates the Outback Mate3S every 30 seconds (through the standard JSON API), processes the result, and holds it internally.
+* Interrogates the Outback Mate3S every 60 seconds (by default) through the standard JSON API, processes the result, and holds it internally.
 * Posts an event every 60 seconds.  This event results in solar system data being published in our database.
 * Publishes a solar system report message every 60 seconds, which any MOP client can subscribe to.
 
@@ -36,7 +36,7 @@ The hardware used in this project, excluding cables and connections, is as follo
 * Three 220 ohm, 1/4 watt resistors
 
 The Raspberry Pi is the heart of the system.  One thermocouple and interface measures the temperature of the batteries (it's placed physically under a battery, where there is no air flow).  The other thermocouple measures the air temperature at the output of the heater; this allows the Raspberry Pi to sense whether the heater is working.  The solid state relay controls the heater.  The electro-mechanical relay senses the output of the solid state relay; this allows the Raspberry Pi to sense whether the solid state relay is working.  The author assumes that the two most likely failure points are (a) the heater, which has moving parts and hot parts, and (b) the solid state relay, simply because it's dealing with power lines.  The LEDs are driving by software, with the following meanings:
-* __Battery Temperature__: a one Hz flashing indicator whose duty cycle indicates the battery temperature: From 0% on to 100% on indicates 0C to 45C, which is the range of temperatures that my solar system batteries (Discover AES 42-48-6650 LiFePO4) may safely be charged.
+* __Battery Temperature__: a 0.5 Hz flashing indicator whose duty cycle indicates the battery temperature: From 0% on to 100% on indicates 0C to 45C, which is the range of temperatures that my solar system batteries (Discover AES 42-48-6650 LiFePO4) may safely be charged.  This LED fast-flashes if the battery temperature can't be read.
 * __Heater Power__: this indicator is on when the heater has been turned on.
 * __Status__: A flashing indicator that encodes some simple status information (see __Status Codes__ section below).
 

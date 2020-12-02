@@ -14,9 +14,6 @@ import static com.dilatush.util.General.isNotNull;
  */
 public class Main {
 
-    public  PostOffice     po;
-    public  ShedSolarActor actor;
-
     private final String[]      args;
     private final Logger        LOGGER;
 
@@ -48,10 +45,6 @@ public class Main {
 
         // start our events system...
         SynchronousEvents.getInstance();
-
-        // start up our post office and our actors...
-        po = new PostOffice( config );
-        actor = new ShedSolarActor( po );
 
         // are we running in assembly test mode or for reals?
         if( config.optBoolean( "assemblyTest", false ) ) {

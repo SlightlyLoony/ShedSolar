@@ -1,5 +1,6 @@
 package com.dilatush.shedsolar;
 
+import com.dilatush.mop.PostOffice;
 import com.dilatush.util.Config;
 import com.dilatush.util.test.TestOrchestrator;
 import com.pi4j.io.gpio.GpioController;
@@ -22,10 +23,13 @@ public class App {
     public Timer            timer;
     public GpioController   gpio;
     public TestOrchestrator orchestrator;
+    public PostOffice po;
+    public  ShedSolarActor actor;
 
-    private BatteryTempLED batteryTempLED;
-    private Outbacker      outbacker;
-    private final Config config;
+    private BatteryTempLED     batteryTempLED;
+    private Outbacker          outbacker;
+    private ProductionDetector productionDetector;
+    private final Config       config;
 
     private App( final Config _config ) {
 
@@ -38,16 +42,23 @@ public class App {
 
     public void run() {
 
-        // get a GPIO controller...
-        gpio = GpioFactory.getInstance();
-
-        // set up our battery temperature LED...
-        batteryTempLED = new BatteryTempLED( config );
-
-        // set up our Outback interrogator...
-        outbacker = new Outbacker( config );
-
         try {
+
+            // get a GPIO controller...
+            gpio = GpioFactory.getInstance();
+
+            // set up our battery temperature LED...
+            batteryTempLED = new BatteryTempLED( config );
+
+            // set up our Outback interrogator...
+            outbacker = new Outbacker( config );
+
+            // set up our production/dormancy discriminator...
+            productionDetector = new ProductionDetector( config );
+
+            // start up our post office and our actors...
+            po = new PostOffice( config );
+            actor = new ShedSolarActor( po );
 
             // establish the temperature reader...
             int  maxRetries     = config.optIntDotted(  "temperatureSensor.maxRetries",     10   );

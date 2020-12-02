@@ -113,7 +113,7 @@ public class Outbacker {
             // publish an event to tell the world what happened...
             SynchronousEvent event = (jsonResponse != null) ? new OutbackReading( new OutbackData( jsonResponse ) ) : new OutbackFailure();
             SynchronousEvents.getInstance().publish( event );
-            LOGGER.fine( event.toString() );
+            LOGGER.finest( event.toString() );
         }
     }
 
