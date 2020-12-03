@@ -7,7 +7,7 @@ import com.dilatush.util.syncevents.SynchronousEvent;
  *
  * @author Tom Dilatush  tom@dilatush.com
  */
-public class BatteryTemperatureEvent implements SynchronousEvent {
+public class BatteryTemperature implements SynchronousEvent {
 
     public final float   degreesC;
     public final boolean goodMeasurement;
@@ -18,9 +18,9 @@ public class BatteryTemperatureEvent implements SynchronousEvent {
     public final boolean thermocoupleShortedToVCC;
 
 
-    public BatteryTemperatureEvent( final float _degreesC, final boolean _goodMeasurement, final boolean _unstable,
-                                    final boolean _ioerror, final boolean _thermocoupleOpen,
-                                    final boolean _thermocoupleShortedToGround, final boolean _thermocoupleShortedToVCC ) {
+    public BatteryTemperature( final float _degreesC, final boolean _goodMeasurement, final boolean _unstable,
+                               final boolean _ioerror, final boolean _thermocoupleOpen,
+                               final boolean _thermocoupleShortedToGround, final boolean _thermocoupleShortedToVCC ) {
         degreesC = _degreesC;
         goodMeasurement = _goodMeasurement;
         unstable = _unstable;

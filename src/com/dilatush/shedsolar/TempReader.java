@@ -1,8 +1,8 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.shedsolar.events.AmbientTemperatureEvent;
-import com.dilatush.shedsolar.events.BatteryTemperatureEvent;
-import com.dilatush.shedsolar.events.HeaterTemperatureEvent;
+import com.dilatush.shedsolar.events.AmbientTemperature;
+import com.dilatush.shedsolar.events.BatteryTemperature;
+import com.dilatush.shedsolar.events.HeaterTemperature;
 import com.dilatush.util.syncevents.SynchronousEvent;
 import com.dilatush.util.syncevents.SynchronousEvents;
 import com.dilatush.util.test.ATestInjector;
@@ -111,7 +111,7 @@ public class TempReader extends TimerTask {
         boolean shortToVCC      = ((rawBattery & SHORT_TO_VCC_MASK) != 0);
         boolean shortToGnd      = ((rawBattery & SHORT_TO_GND_MASK) != 0);
 
-        publishEvent( new BatteryTemperatureEvent( batteryTemp, goodMeasurement, unstable, ioerror, open, shortToGnd, shortToVCC ) );
+        publishEvent( new BatteryTemperature( batteryTemp, goodMeasurement, unstable, ioerror, open, shortToGnd, shortToVCC ) );
 
         // handle the heater temperature event...
         goodMeasurement = ((rawHeater & FAULT_MASK)        == 0);
@@ -121,7 +121,7 @@ public class TempReader extends TimerTask {
         shortToVCC      = ((rawHeater & SHORT_TO_VCC_MASK) != 0);
         shortToGnd      = ((rawHeater & SHORT_TO_GND_MASK) != 0);
 
-       publishEvent( new HeaterTemperatureEvent( heaterTemp, goodMeasurement, unstable, ioerror, open, shortToGnd, shortToVCC ) );
+       publishEvent( new HeaterTemperature( heaterTemp, goodMeasurement, unstable, ioerror, open, shortToGnd, shortToVCC ) );
 
         // handle the ambient temperature event...
         float ambientTemp = 0;
@@ -136,7 +136,7 @@ public class TempReader extends TimerTask {
         }
         if( ambientCount >= 1 ) {
             ambientTemp /= ambientCount;
-            publishEvent( new AmbientTemperatureEvent( ambientTemp ) );
+            publishEvent( new AmbientTemperature( ambientTemp ) );
         }
     }
 
@@ -148,8 +148,12 @@ public class TempReader extends TimerTask {
 
 
     /**
-     * Reads temperature from the given SPI device, assuming a MAX31855 chip, returning the result from the chip except that the unstable bit is
-     * synthesized by this method.
+     * <p>Reads temperature from the given SPI device, assuming a MAX31855 chip, returning the result from the chip except that the unstable bit is
+     * synthesized by this method.</p>
+     * <p>We observed in our initial use of this device that occasionally an anomalous reading would be seen.  We were never able to nail down a
+     * cause for this reading, but we could see a pattern: the anomalous readings never seemed to occur sequentially, and only the value of the
+     * thermocouple temperature (not the cold junction temperature) were affected.  So we came up with a simple filter for these anomalies: we
+     * accept a reading if (a) it was the same as the most recent reading we took, or (b) we get three identical readings in a row.</p>
      *
      * @param _device the SPI device to read temperature from
      * @param _lastRawTemp the last stable raw temperature read from the given device

@@ -7,12 +7,12 @@ import com.dilatush.util.syncevents.SynchronousEvent;
  *
  * @author Tom Dilatush  tom@dilatush.com
  */
-public class AmbientTemperatureEvent implements SynchronousEvent {
+public class AmbientTemperature implements SynchronousEvent {
 
     public final float   degreesC;
 
 
-    public AmbientTemperatureEvent( final float _degreesC ) {
+    public AmbientTemperature( final float _degreesC ) {
         degreesC = _degreesC;
     }
 

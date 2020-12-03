@@ -3,6 +3,7 @@ package com.dilatush.shedsolar;
 import com.dilatush.mop.Actor;
 import com.dilatush.mop.Message;
 import com.dilatush.mop.PostOffice;
+import com.dilatush.shedsolar.events.CPOFailure;
 import com.dilatush.shedsolar.events.Weather;
 import com.dilatush.shedsolar.events.WeatherFailure;
 import com.dilatush.util.syncevents.SynchronousEvents;
@@ -28,8 +29,8 @@ public class ShedSolarActor extends Actor {
 
     private static final String mailboxName = "main";
 
-    private TimerTask checker;
-    private CheckerTester checkerTester;
+    private volatile TimerTask     checker;
+    private final    CheckerTester checkerTester;
 
     /**
      * Creates a new instance of this class, using the given post office and creating a mailbox with the given name.
@@ -108,6 +109,17 @@ public class ShedSolarActor extends Actor {
             App.instance.timer.schedule( checker, DELAY_BETWEEN_FAILURE_EVENTS );
 
             LOGGER.info( "Failed to receive weather report" );
+
+            // a little problem analysis here...
+            // if we've lost connection to the post office, publish an event to that effect...
+            if( !App.instance.po.isConnected() ) {
+                SynchronousEvents.getInstance().publish( new CPOFailure() );
+            }
+
+            // otherwise, try re-subscribing...
+            else {
+                mailbox.subscribe( "weather.weather", "minute.report" );
+            }
         }
     }
 

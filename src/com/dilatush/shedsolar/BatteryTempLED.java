@@ -1,6 +1,6 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.shedsolar.events.BatteryTemperatureEvent;
+import com.dilatush.shedsolar.events.BatteryTemperature;
 import com.dilatush.util.Config;
 import com.dilatush.util.syncevents.SubscribeEvent;
 import com.dilatush.util.syncevents.SubscriptionDefinition;
@@ -23,15 +23,17 @@ import java.util.TimerTask;
  */
 public class BatteryTempLED {
 
-    private final float minTemp;
-    private final float maxTemp;
-    private final long normalInterval;
-    private final long errorInterval;
-
+    private final float                minTemp;
+    private final float                maxTemp;
+    private final long                 normalInterval;
+    private final long                 errorInterval;
     private final GpioPinDigitalOutput led;
-    private float batteryTemp;
-    private boolean goodBatteryTemp;
-    private boolean started;
+
+    private boolean                    started;
+
+    // these are set on the events thread, read on the timer thread...
+    private volatile float   batteryTemp;
+    private volatile boolean goodBatteryTemp;
 
 
     /**
@@ -56,7 +58,7 @@ public class BatteryTempLED {
 
         // subscribe to battery temperature readings...
         SynchronousEvents.getInstance().publish(
-                new SubscribeEvent( new SubscriptionDefinition( this::handleBatteryTempEvent, BatteryTemperatureEvent.class ) )
+                new SubscribeEvent( new SubscriptionDefinition( this::handleBatteryTempEvent, BatteryTemperature.class ) )
         );
     }
 
@@ -68,7 +70,7 @@ public class BatteryTempLED {
      */
     public void handleBatteryTempEvent( final SynchronousEvent _event ) {
 
-        BatteryTemperatureEvent be = (BatteryTemperatureEvent) _event;
+        BatteryTemperature be = (BatteryTemperature) _event;
 
         // record our latest battery temperature information...
         goodBatteryTemp = be.goodMeasurement;

@@ -18,18 +18,23 @@ import java.util.logging.Logger;
 public class App {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
+    private static final long   MAX_CPO_WAIT = 10000;
 
     public static App       instance;
+
+    public final Config       config;
+
     public Timer            timer;
     public GpioController   gpio;
     public TestOrchestrator orchestrator;
-    public PostOffice po;
-    public  ShedSolarActor actor;
+    public PostOffice       po;
+    public ShedSolarActor   actor;
 
-    private BatteryTempLED     batteryTempLED;
-    private Outbacker          outbacker;
-    private ProductionDetector productionDetector;
-    private final Config       config;
+    // these are public ONLY to suppress some bogus warnings that occur because the compiler doesn't understand singletons...
+    public BatteryTempLED     batteryTempLED;
+    public Outbacker          outbacker;
+    public ProductionDetector productionDetector;
+    public HeaterControl      heaterControl;
 
     private App( final Config _config ) {
 
@@ -56,9 +61,11 @@ public class App {
             // set up our production/dormancy discriminator...
             productionDetector = new ProductionDetector( config );
 
+            // set up our heater control...
+            heaterControl = new HeaterControl( config );
+
             // start up our post office and our actors...
-            po = new PostOffice( config );
-            actor = new ShedSolarActor( po );
+            establishCPO();
 
             // establish the temperature reader...
             int  maxRetries     = config.optIntDotted(  "temperatureSensor.maxRetries",     10   );
@@ -75,6 +82,31 @@ public class App {
             LOGGER.log( Level.SEVERE, "Exception during App startup", _e );
             System.exit( 1 );
         }
+    }
+
+
+    private void establishCPO() {
+
+        // create our post office, which initiates the connection to the CPO...
+        po = new PostOffice( config );
+
+        // wait a bit for the CPO to connect...
+        long start = System.currentTimeMillis();
+        while( (System.currentTimeMillis() - start) < MAX_CPO_WAIT ) {
+
+            // have we connected to the CPO yet?
+            if( po.isConnected() ) {
+
+                // yup, so start our actor and get out of here...
+                actor = new ShedSolarActor( po );
+                LOGGER.info( "Connected to CPO" );
+                return;
+            }
+        }
+
+        // if we get here, we've failed to connect to the CPO at startup - time to leave...
+        LOGGER.info( "Failed to connect to CPO" );
+        throw new IllegalStateException( "Failed to connect to CPO" );
     }
 
 

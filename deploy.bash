@@ -5,4 +5,5 @@ scp /Users/tom/IdeaProjects/ShedSolar/out/artifacts/ShedSolar/ShedSolar.jar shed
 scp /Users/tom/IdeaProjects/ShedSolar/logging.properties shedsolar:/apps/shedsolar
 scp /Users/tom/IdeaProjects/ShedSolar/configuration.json shedsolar:/apps/shedsolar
 scp /Users/tom/IdeaProjects/ShedSolar/runToDebug.bash shedsolar:/apps/shedsolar
+scp /Users/tom/IdeaProjects/ShedSolar/run.bash shedsolar:/apps/shedsolar
 

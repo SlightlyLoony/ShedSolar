@@ -1,6 +1,7 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.shedsolar.events.OutbackReading;
+import com.dilatush.shedsolar.events.TempMode;
 import com.dilatush.shedsolar.events.Weather;
 import com.dilatush.util.Config;
 import com.dilatush.util.syncevents.SubscribeEvent;
@@ -11,7 +12,11 @@ import org.shredzone.commons.suncalc.SunTimes;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.Objects;
+import java.util.TimerTask;
 import java.util.logging.Logger;
+
+import static com.dilatush.shedsolar.TemperatureMode.DORMANT;
+import static com.dilatush.shedsolar.TemperatureMode.PRODUCTION;
 
 /**
  * Keeps track of transitions between periods of possible solar production and periods of solar system dormancy, using information about solar panel
@@ -26,6 +31,21 @@ public class ProductionDetector {
 
     private final double lat;
     private final double lon;
+    private final float  pyrometerThreshold;
+    private final float  panelThreshold;
+    private final int    toProductionDelay;
+    private final int    toDormantDelay;
+
+
+    // these fields are set on the events thread, read on the timer thread...
+    private volatile boolean weatherGood;
+    private volatile boolean outbackGood;
+    private volatile float   pyrometerPower;
+    private volatile float   panelVoltage;
+
+    // these fields are set and read on the timer thread only...
+    private int              minutesSinceChange;
+    private TemperatureMode  lastMode;
 
 
     /**
@@ -34,8 +54,17 @@ public class ProductionDetector {
      * @param _config the app's configuration
      */
     public ProductionDetector( final Config _config ) {
-        lat = _config.getDoubleDotted( "productionDetector.lat" );
-        lon = _config.getDoubleDotted( "productionDetector.lon" );
+
+        lat                = _config.getDoubleDotted( "productionDetector.lat"                        );
+        lon                = _config.getDoubleDotted( "productionDetector.lon"                        );
+        pyrometerThreshold = _config.optFloatDotted(  "productionDetector.pyrometerThreshold",    80f );
+        panelThreshold     = _config.optFloatDotted(  "productionDetector.panelThreshold",       225f );
+        toProductionDelay  = _config.optIntDotted(    "productionDetector.toProductionDelay",      5  );
+        toDormantDelay     = _config.optIntDotted(    "productionDetector.toDormantDelay",        60  );
+        long interval      = _config.optLongDotted(   "productionDetector.intervalMS",         60000  );
+
+        minutesSinceChange = 0;
+        lastMode           = PRODUCTION;    // we assume production mode on startup, just to be safe...
 
         // subscribe to weather events...
         SynchronousEvents.getInstance().publish(
@@ -49,6 +78,77 @@ public class ProductionDetector {
                         new SubscriptionDefinition( event -> handleOutbackReadingEvent( (OutbackReading) event ), OutbackReading.class )
                 )
         );
+
+        // announce our default production mode...
+        SynchronousEvents.getInstance().publish( new TempMode( lastMode ) );
+
+        // schedule our detector...
+        App.instance.timer.schedule( new Detector(), interval, interval );
+    }
+
+
+    private class Detector extends TimerTask {
+
+        /**
+         * The action to be performed by this timer task.
+         */
+        @Override
+        public void run() {
+
+            // get some calculated sunrise/sunset times...
+            ZonedDateTime now     = ZonedDateTime.now();
+            Instant todaySunrise  = getSunrise( now );
+            Instant todaySunset   = getSunset( now );
+
+            // this is what we're figuring out...
+            TemperatureMode mode;
+
+            // if we have no solar power data at all, then we'll rely exclusively on sunrise/sunset times...
+            if( !(weatherGood || outbackGood) ) {
+
+                mode = (now.toInstant().isAfter( todaySunrise ) && now.toInstant().isBefore( todaySunset )) ? PRODUCTION : DORMANT;
+            }
+
+            // otherwise, we'll incorporate the solar power data into our thinking...
+            else {
+
+                // if we have pyrometer data, we'll use that, as it's a bit more sensitive...
+                if( weatherGood ) {
+
+                    mode = (pyrometerPower > pyrometerThreshold) ? PRODUCTION : DORMANT;
+                }
+
+                // otherwise, we'll use the solar panel voltage...
+                else {
+
+                    mode = (panelVoltage > panelThreshold) ? PRODUCTION : DORMANT;
+                }
+            }
+
+            // if the last mode and this mode are the same, reset our minutes counter and leave...
+            if( mode == lastMode ) {
+                minutesSinceChange = 0;
+                return;
+            }
+
+            // otherwise, bump our minutes counter and see if we're transitioning...
+            minutesSinceChange++;
+            if( (lastMode == PRODUCTION) && (minutesSinceChange >= toDormantDelay) ) {
+
+                // it's time to transition to dormant mode...
+                lastMode = DORMANT;
+                minutesSinceChange = 0;
+                SynchronousEvents.getInstance().publish( new TempMode( lastMode ) );
+
+            }
+            else if( (lastMode == DORMANT) && (minutesSinceChange >= toProductionDelay) ) {
+
+                // it's time to transition to production mode...
+                lastMode = PRODUCTION;
+                minutesSinceChange = 0;
+                SynchronousEvents.getInstance().publish( new TempMode( lastMode ) );
+            }
+        }
     }
 
 
@@ -58,6 +158,8 @@ public class ProductionDetector {
      * @param _event the Outback reading event
      */
     public void handleOutbackReadingEvent( final OutbackReading _event ) {
+        outbackGood = true;
+        panelVoltage = (float) _event.outbackData.panelVoltage;
         LOGGER.finest( _event.toString() );
     }
 
@@ -68,6 +170,8 @@ public class ProductionDetector {
      * @param _event the weather event
      */
     public void handleWeatherEvent( final Weather _event ) {
+        weatherGood = true;
+        pyrometerPower = (float) _event.irradiance;
         LOGGER.finest( _event.toString() );
     }
 
@@ -78,6 +182,7 @@ public class ProductionDetector {
      * @param _event the Outback reading event
      */
     public void handleOutbackFailureEvent( final OutbackReading _event ) {
+        outbackGood = false;
         LOGGER.finest( _event.toString() );
     }
 
@@ -88,10 +193,17 @@ public class ProductionDetector {
      * @param _event the weather event
      */
     public void handleWeatherFailureEvent( final Weather _event ) {
+        weatherGood = false;
         LOGGER.finest( _event.toString() );
     }
 
 
+    /**
+     * Returns the computed sunrise time at this instance's location on the given date.
+     *
+     * @param _date the date to compute sunrise time for
+     * @return the computed sunrise time
+     */
     private Instant getSunrise( ZonedDateTime _date ) {
         SunTimes times = SunTimes.compute()
                 .on( _date )
@@ -101,6 +213,12 @@ public class ProductionDetector {
     }
 
 
+    /**
+     * Returns the computed sunset time at this instance's location on the given date.
+     *
+     * @param _date the date to compute sunset time for
+     * @return the computed sunset time
+     */
     private Instant getSunset( ZonedDateTime _date ) {
         SunTimes times = SunTimes.compute()
                 .on( _date )

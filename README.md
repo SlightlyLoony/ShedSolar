@@ -4,7 +4,7 @@
 
 ## What is ShedSolar?
 *ShedSolar* is a program that provides several services related to the Outback solar system that I have installed in my shed:
-* Controls the temperature of the batteries.  My system has three Discover AES 7.4KWH LiFePO4 batteries.  These batteries cannot be charged if their temperature is below 0C (32F), and they are not in a heated building.  Here in our high northern Utah valley we routinely see temperatures as low as -15C (0F), so my system's batteries are inside an insulated box with a 200W heater.  *ShedSolar* will sense the battery temperature and turn the heater on as required to keep the battery temperature at an appropriate level.  During hours when the sun is shining (and the batteries can therefore be charged), the battery temperature will be kept within the range of 15C to 18C (60F to 65F).  Otherwise, the range will drop to 0C to 3C (32F to 37F) to the heater power requirements.  It obtains the sunlight level from my weather system, which directly senses solar power with a pyrometer.  The total time that the heater is powered on is tracked internally.
+* Controls the temperature of the batteries.  My system has three Discover AES 7.4KWH LiFePO4 batteries.  These batteries cannot be charged if their temperature is below 0C (32F), and they are not in a heated building.  Here in our high northern Utah valley we routinely see temperatures as low as -15C (0F), so my system's batteries are inside an insulated box with a 200W heater.  *ShedSolar* will sense the battery temperature and turn the heater on as required to keep the battery temperature at an appropriate level.  During hours when the sun is shining (and the batteries can therefore be charged), the battery temperature will be kept within the range of 15C to 20C (59F to 68F).  Otherwise, the range will drop to 0C to 5C (32F to 41F) to lower the heater power requirements.  It obtains the sunlight level from my weather system, which directly senses solar power with a pyrometer.  The total time that the heater is powered on is tracked internally.
 * Monitors the temperature of the batteries, providing alarm events for under-temperature (<0C, which might occur on heater failure) or over-temperature (>45C, which might occur if the batteries generate too much heat when the ambient temperature is high).
 * Interrogates the Outback Mate3S every 60 seconds (by default) through the standard JSON API, processes the result, and holds it internally.
 * Posts an event every 60 seconds.  This event results in solar system data being published in our database.
@@ -18,6 +18,7 @@ ShedSolar has several dependencies:
 * *MOP* is a message-oriented programming module the author also wrote, freely available from https://github.com/SlightlyLoony/MOP.
 * *Util* is a utilities module the author also wrote, freely available from https://github.com/SlightlyLoony/Util.
 * *JSON* is the bog-standard Java JSON module, freely available from https://github.com/stleary/JSON-java.
+* *commons-suncalc* performs sun-related calculations, freely available from https://shredzone.org/maven/commons-suncalc/index.html
 
 ## Why is ShedSolar's code so awful?
 The author is a retired software and hardware engineer who did this just for fun, and who (so far, anyway) has no code reviewers to upbraid him.  Please feel free to fill in this gap!  You may contact the author at tom@dilatush.com.
@@ -65,6 +66,7 @@ These are the codes displayed by the status indicator.  There may be multiple st
 | 00     | Barn router unreachable|
 | 01     | Shed router unreachable|
 | 000    | Internet unreachable|
+| 001    | CPO not connected|
 | 110    | Solid state relay failure|
 | 111    | Heater failure|
 | 1100   | Weather reports not being received|
