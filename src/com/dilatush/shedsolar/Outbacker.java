@@ -111,9 +111,15 @@ public class Outbacker {
             }
 
             // publish an event to tell the world what happened...
-            SynchronousEvent event = (jsonResponse != null) ? new OutbackReading( new OutbackData( jsonResponse ) ) : new OutbackFailure();
-            SynchronousEvents.getInstance().publish( event );
-            LOGGER.finest( event.toString() );
+            try {
+                SynchronousEvent event = (jsonResponse != null) ? new OutbackReading( new OutbackData( jsonResponse ) ) : new OutbackFailure();
+                SynchronousEvents.getInstance().publish( event );
+                LOGGER.finest( event.toString() );
+            }
+            catch( JSONException _e ) {
+                LOGGER.log( Level.WARNING, "Problem decoding Outback JSON response", _e );
+                SynchronousEvents.getInstance().publish( new OutbackFailure() );
+            }
         }
     }
 

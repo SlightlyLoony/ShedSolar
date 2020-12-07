@@ -35,6 +35,7 @@ public class App {
     public Outbacker          outbacker;
     public ProductionDetector productionDetector;
     public HeaterControl      heaterControl;
+    public TempReader         tempReader;
 
     private App( final Config _config ) {
 
@@ -64,14 +65,11 @@ public class App {
             // set up our heater control...
             heaterControl = new HeaterControl( config );
 
+            // set up the temperature reader...
+            tempReader = new TempReader( config );
+
             // start up our post office and our actors...
             establishCPO();
-
-            // establish the temperature reader...
-            int  maxRetries     = config.optIntDotted(  "temperatureSensor.maxRetries",     10   );
-            int  minStableReads = config.optIntDotted(  "temperatureSensor.minStableReads", 3    );
-            long intervalMS     = config.optLongDotted( "temperatureSensor.intervalMS",     5000 );
-            timer.schedule( new TempReader( maxRetries, minStableReads ), 0, intervalMS );
 
             // start up our test orchestration...
             orchestrator.schedule( config );

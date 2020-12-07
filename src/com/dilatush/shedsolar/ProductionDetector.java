@@ -42,6 +42,7 @@ public class ProductionDetector {
     private volatile boolean outbackGood;
     private volatile float   pyrometerPower;
     private volatile float   panelVoltage;
+    private volatile float   panelCurrent;
 
     // these fields are set and read on the timer thread only...
     private int              minutesSinceChange;
@@ -112,16 +113,20 @@ public class ProductionDetector {
             // otherwise, we'll incorporate the solar power data into our thinking...
             else {
 
-                // if we have pyrometer data, we'll use that, as it's a bit more sensitive...
-                if( weatherGood ) {
+                // if the current time is before sunrise or after sunset, then we're going hard dormant...
+                if( now.toInstant().isBefore( todaySunrise ) || now.toInstant().isAfter( todaySunset )) {
+                    mode = DORMANT;
+                }
+
+                // if it's daytime and we have pyrometer data, we'll use that, as it's simple and direct...
+                else if( weatherGood ) {
 
                     mode = (pyrometerPower > pyrometerThreshold) ? PRODUCTION : DORMANT;
                 }
 
-                // otherwise, we'll use the solar panel voltage...
+                // otherwise, we'll use the solar panel data - voltage and current...
                 else {
-
-                    mode = (panelVoltage > panelThreshold) ? PRODUCTION : DORMANT;
+                    mode = ((panelCurrent > 0) && (panelVoltage > panelThreshold)) ? PRODUCTION : DORMANT;
                 }
             }
 
@@ -160,6 +165,7 @@ public class ProductionDetector {
     public void handleOutbackReadingEvent( final OutbackReading _event ) {
         outbackGood = true;
         panelVoltage = (float) _event.outbackData.panelVoltage;
+        panelCurrent = (float) _event.outbackData.panelCurrent;
         LOGGER.finest( _event.toString() );
     }
 
