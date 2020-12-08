@@ -2,7 +2,6 @@
   <library name="Util">
     <CLASSES>
       <root url="jar://$PROJECT_DIR$/../Util/out/artifacts/Util/Util.jar!/" />
-      <root url="jar://$PROJECT_DIR$/../MOP/out/artifacts/MOP.jar!/" />
     </CLASSES>
     <JAVADOC />
     <SOURCES />

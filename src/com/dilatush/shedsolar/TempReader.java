@@ -4,6 +4,8 @@ import com.dilatush.shedsolar.events.AmbientTemperature;
 import com.dilatush.shedsolar.events.BatteryTemperature;
 import com.dilatush.shedsolar.events.HeaterTemperature;
 import com.dilatush.util.Config;
+import com.dilatush.util.noisefilter.NoiseFilter;
+import com.dilatush.util.noisefilter.Sample;
 import com.dilatush.util.syncevents.SynchronousEvent;
 import com.dilatush.util.syncevents.SynchronousEvents;
 import com.dilatush.util.test.ATestInjector;
@@ -13,7 +15,7 @@ import com.pi4j.io.spi.SpiFactory;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.*;
+import java.util.TimerTask;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -57,34 +59,35 @@ public class TempReader {
     private final NoiseFilter batteryFilter;
     private final NoiseFilter heaterFilter;
 
-    private final long         sampleTreeDepthMS;
-    private final long         sampleTreeNoiseMS;
-    private final long         errorEventIntervalMS;
+    private final long  sampleTreeDepthMS;
+    private final long  sampleTreeNoiseMS;
+    private final long  errorEventIntervalMS;
+    private final float temperatureDistanceWeight;
 
-    private NoiseFilter.MeasurementReading lastBatteryReading = null;
-    private NoiseFilter.MeasurementReading lastHeaterReading  = null;
-    private NoiseFilter.MeasurementReading lastAmbientReading = null;
+    private Sample     lastBatteryReading = null;
+    private Sample     lastHeaterReading  = null;
+    private Sample     lastAmbientReading = null;
 
-    private Instant lastBatteryErrorEvent = null;
-    private Instant lastHeaterErrorEvent  = null;
+    private Instant    lastBatteryErrorEvent = null;
+    private Instant    lastHeaterErrorEvent  = null;
 
 
     public TempReader( final Config _config ) throws IOException {
 
         // get our configuration parameters...
-        long intervalMS               = _config.getLongDotted(  "tempReader.intervalMS"              );
-        sampleTreeDepthMS             = _config.getLongDotted(  "tempReader.sampleTreeDepthMS"       );
-        sampleTreeNoiseMS             = _config.getLongDotted(  "tempReader.sampleTreeNoiseMS"       );
-        errorEventIntervalMS          = _config.getLongDotted(  "tempReader.errorEventIntervalMS"    );
-        float sampleTreeDeratingPower = _config.getFloatDotted( "tempReader.sampleTreeDeratingPower" );
+        long intervalMS               = _config.getLongDotted(  "tempReader.intervalMS"                );
+        sampleTreeDepthMS             = _config.getLongDotted(  "tempReader.sampleTreeDepthMS"         );
+        sampleTreeNoiseMS             = _config.getLongDotted(  "tempReader.sampleTreeNoiseMS"         );
+        errorEventIntervalMS          = _config.getLongDotted(  "tempReader.errorEventIntervalMS"      );
+        temperatureDistanceWeight     = _config.getFloatDotted( "tempReader.temperatureDistanceWeight" );
 
         // get our SPI devices...
         batteryTemp = SpiFactory.getInstance( SpiChannel.CS0, SpiDevice.DEFAULT_SPI_SPEED, SpiDevice.DEFAULT_SPI_MODE );
         heaterTemp  = SpiFactory.getInstance( SpiChannel.CS1, SpiDevice.DEFAULT_SPI_SPEED, SpiDevice.DEFAULT_SPI_MODE );
 
         // create our noise filters...
-        batteryFilter = new NoiseFilter( sampleTreeDepthMS, TempReader::closeness );
-        heaterFilter  = new NoiseFilter( sampleTreeDepthMS, TempReader::closeness );
+        batteryFilter = new NoiseFilter( sampleTreeDepthMS, this::distance );
+        heaterFilter  = new NoiseFilter( sampleTreeDepthMS, this::distance );
 
         // register our tests...
         App.instance.orchestrator.registerTestInjector( batteryTest, "TempReader.readBattery" );
@@ -95,10 +98,19 @@ public class TempReader {
     }
 
 
-    private static float closeness( final NoiseFilter.MeasurementReading _new, final NoiseFilter.MeasurementReading _existing ) {
-        return 0;
+    /**
+     * A simple distance implementation.  This implementation assumes that temperature values generally lie within an 80C range, and the square of
+     * the difference between the two sample's temperature has a 98% weight in the result.  The range of time differences is assumed to lie within
+     * a 40 second (40,000 millisecond) range, and the square of the difference of the timestamps, in milliseconds, has a 2% weight in the result.
+     * The two weighted computations are simply added to get the final distance.
+     */
+    private float distance( final Sample _newSample, final Sample _existingSample ) {
+        float dTemp            = _newSample.value - _existingSample.value;
+        float dTime            = _newSample.timestamp.toEpochMilli() - _existingSample.timestamp.toEpochMilli();
+        float measurementScore =       temperatureDistanceWeight  * (float) Math.pow( dTemp, 2 ) / 6400;
+        float timeScore        = (1f - temperatureDistanceWeight) * (float) Math.pow( dTime, 2 ) / 16000000;
+        return measurementScore + timeScore;
     }
-
 
 
     private class TempReaderTask extends TimerTask {
@@ -140,18 +152,18 @@ public class TempReader {
 
                     // add a sample to the filter...
                     float batteryTemp        = ((rawBattery & THERMOCOUPLE_MASK ) >> THERMOCOUPLE_OFFSET ) /  4.0f;
-                    batteryFilter.addSample( new NoiseFilter.MeasurementReading( batteryTemp, Instant.now() ) );
+                    batteryFilter.addSample( new Sample( batteryTemp, Instant.now() ) );
 
                     // prune our filter...
                     batteryFilter.prune( Instant.now() );
 
-                    // get a temperature reading, if we can...
-                    NoiseFilter.MeasurementReading reading = batteryFilter.measurementAt( sampleTreeDepthMS * 3/4, sampleTreeNoiseMS, Instant.now() );
+                    // get a temperature sample, if we can...
+                    Sample sample = batteryFilter.sampleAt( sampleTreeDepthMS * 3/4, sampleTreeNoiseMS, Instant.now() );
 
-                    // if we got a reading, and it's different than our last reading, send an event...
-                    if( (reading != null) && ((lastBatteryReading == null) || (reading.measurement != lastBatteryReading.measurement)) ) {
-                        publishEvent( new BatteryTemperature( reading.measurement, true, false, false, false, false ) );
-                        lastBatteryReading = reading;
+                    // if we got a sample, and it's different than our last sample, send an event...
+                    if( (sample != null) && ((lastBatteryReading == null) || (sample.value != lastBatteryReading.value)) ) {
+                        publishEvent( new BatteryTemperature( sample.value, true, false, false, false, false ) );
+                        lastBatteryReading = sample;
                     }
                 }
 
@@ -184,17 +196,17 @@ public class TempReader {
 
                     // add a sample to the filter...
                     float heaterTemp        = ((rawHeater & THERMOCOUPLE_MASK ) >> THERMOCOUPLE_OFFSET ) /  4.0f;
-                    heaterFilter.addSample( new NoiseFilter.MeasurementReading( heaterTemp, Instant.now() ) );
+                    heaterFilter.addSample( new Sample( heaterTemp, Instant.now() ) );
 
                     // prune our filter...
                     heaterFilter.prune( Instant.now() );
 
                     // get a temperature reading, if we can...
-                    NoiseFilter.MeasurementReading reading = heaterFilter.measurementAt( sampleTreeDepthMS * 3/4, sampleTreeNoiseMS, Instant.now() );
+                    Sample reading = heaterFilter.sampleAt( sampleTreeDepthMS * 3/4, sampleTreeNoiseMS, Instant.now() );
 
                     // if we got a reading, and it's different than our last reading, send an event...
-                    if( (reading != null) && ((lastHeaterReading == null) || (reading.measurement != lastHeaterReading.measurement)) ) {
-                        publishEvent( new HeaterTemperature( reading.measurement, true, false, false, false, false ) );
+                    if( (reading != null) && ((lastHeaterReading == null) || (reading.value != lastHeaterReading.value)) ) {
+                        publishEvent( new HeaterTemperature( reading.value, true, false, false, false, false ) );
                         lastHeaterReading = reading;
                     }
                 }
@@ -213,9 +225,9 @@ public class TempReader {
 
                 // if we don't have a NaN, then we have a temperature...
                 if( !Float.isNaN( ambientTemp ) ) {
-                    NoiseFilter.MeasurementReading ambient = new NoiseFilter.MeasurementReading( ambientTemp, Instant.now() );
-                    if( (lastAmbientReading == null) || (lastAmbientReading.measurement != ambient.measurement) ) {
-                        publishEvent( new AmbientTemperature( ambient.measurement ) );
+                    Sample ambient = new Sample( ambientTemp, Instant.now() );
+                    if( (lastAmbientReading == null) || (lastAmbientReading.value != ambient.value) ) {
+                        publishEvent( new AmbientTemperature( ambient.value ) );
                         lastAmbientReading = ambient;
                     }
                 }
