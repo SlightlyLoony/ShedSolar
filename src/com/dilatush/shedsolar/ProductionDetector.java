@@ -88,12 +88,12 @@ public class ProductionDetector {
     }
 
 
+    /**
+     * The {@link TimerTask} that does all the actual work of this class.
+     */
     private class Detector extends TimerTask {
 
-        /**
-         * The action to be performed by this timer task.
-         */
-        @Override
+         @Override
         public void run() {
 
             // get some calculated sunrise/sunset times...

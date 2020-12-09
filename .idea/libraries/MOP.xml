@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="MOP">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/../MOP/out/artifacts/MOP.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -4,6 +4,7 @@ import com.dilatush.shedsolar.events.AmbientTemperature;
 import com.dilatush.shedsolar.events.BatteryTemperature;
 import com.dilatush.shedsolar.events.HeaterTemperature;
 import com.dilatush.util.Config;
+import com.dilatush.util.noisefilter.Distance;
 import com.dilatush.util.noisefilter.NoiseFilter;
 import com.dilatush.util.noisefilter.Sample;
 import com.dilatush.util.syncevents.SynchronousEvent;
@@ -26,6 +27,11 @@ import java.util.logging.Logger;
  * for reasons that we've never been able to figure out.  Both parts that we used exhibit the same behavior.  Furthermore, if the chips are read
  * multiple times in quick succession, the anomalous reading persists.  Our solution is to read the temperatures at 500ms intervals and throw out
  * the outliers.  This is not as easy as it sounds!</p>
+ * <p>Further observation of the MX31855 outputs showed that both of our boards had roughly 2 second long periods of anomalously low readings at
+ * regular intervals of about 10 seconds.  We have no explanation for this, and can find no online discussion of it anywhere.  If we had known this
+ * prior to building {@link NoiseFilter}, we'd probably have done something simpler.  But no matter, as {@link NoiseFilter} seesm to handle the
+ * issue just fine when configured with a {@link Distance} function that is much more heavily weighted for delta
+ * temperature than for delta time.</p>
  * <p>While temperatures are actually read twice a second, they are only reported (by events) upon change.  During startup, readings are taken for
  * 10 seconds (20 readings) to determine the baseline.</p>
  *
@@ -35,6 +41,7 @@ public class TempReader {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
+    // These values are derived from the MAX31855 specification...
     private final static int THERMOCOUPLE_MASK    = 0xFFFC0000;
     private final static int THERMOCOUPLE_OFFSET  = 18;
     private final static int COLD_JUNCTION_MASK   = 0x0000FFF0;
@@ -47,8 +54,8 @@ public class TempReader {
 
 
     // the Pi4J SPI device instances for each of our sensors...
-    private final SpiDevice batteryTemp;
-    private final SpiDevice heaterTemp;
+    private final SpiDevice batteryTempSPI;
+    private final SpiDevice heaterTempSPI;
 
     // four bytes of data to write when reading temperature...
     private final byte[] writeData = new byte[] { (byte) 0, (byte) 0, (byte) 0, (byte) 0 };
@@ -72,6 +79,12 @@ public class TempReader {
     private Instant    lastHeaterErrorEvent  = null;
 
 
+    /**
+     * Creates a new instance of this class, configured according to the given configuration file.
+     *
+     * @param _config the configuration file
+     * @throws IOException on any problem configuring the SPI interface
+     */
     public TempReader( final Config _config ) throws IOException {
 
         // get our configuration parameters...
@@ -82,8 +95,8 @@ public class TempReader {
         temperatureDistanceWeight     = _config.getFloatDotted( "tempReader.temperatureDistanceWeight" );
 
         // get our SPI devices...
-        batteryTemp = SpiFactory.getInstance( SpiChannel.CS0, SpiDevice.DEFAULT_SPI_SPEED, SpiDevice.DEFAULT_SPI_MODE );
-        heaterTemp  = SpiFactory.getInstance( SpiChannel.CS1, SpiDevice.DEFAULT_SPI_SPEED, SpiDevice.DEFAULT_SPI_MODE );
+        batteryTempSPI = SpiFactory.getInstance( SpiChannel.CS0, SpiDevice.DEFAULT_SPI_SPEED, SpiDevice.DEFAULT_SPI_MODE );
+        heaterTempSPI = SpiFactory.getInstance( SpiChannel.CS1, SpiDevice.DEFAULT_SPI_SPEED, SpiDevice.DEFAULT_SPI_MODE );
 
         // create our noise filters...
         batteryFilter = new NoiseFilter( sampleTreeDepthMS, this::distance );
@@ -113,11 +126,11 @@ public class TempReader {
     }
 
 
+    /**
+     * The {@link TimerTask} that does all the work of this class.
+     */
     private class TempReaderTask extends TimerTask {
 
-        /**
-         * The action to be performed by this timer task.
-         */
         @Override
         public void run() {
 
@@ -125,7 +138,7 @@ public class TempReader {
 
                 /* handle the battery reading... */
                 // first get the raw reading...
-                int rawBattery = batteryTest.inject( getRaw( batteryTemp, "Battery" ) );
+                int rawBattery = batteryTest.inject( getRaw( batteryTempSPI, "Battery" ) );
 
                 // if there's an error, handle it...
                 if( (rawBattery & FAULT_MASK) != 0 ) {
@@ -152,6 +165,7 @@ public class TempReader {
 
                     // add a sample to the filter...
                     float batteryTemp        = ((rawBattery & THERMOCOUPLE_MASK ) >> THERMOCOUPLE_OFFSET ) /  4.0f;
+                    LOGGER.finest( "Battery temperature read: " + batteryTemp );
                     batteryFilter.addSample( new Sample( batteryTemp, Instant.now() ) );
 
                     // prune our filter...
@@ -169,7 +183,7 @@ public class TempReader {
 
                 /* handle the heater reading... */
                 // first get the raw reading...
-                 int rawHeater  = heaterTest.inject(  getRaw( heaterTemp,  "Heater"  ) );
+                 int rawHeater  = heaterTest.inject(  getRaw( heaterTempSPI,  "Heater"  ) );
 
                  // if there's an error, handle it...
                 if( (rawHeater & FAULT_MASK) != 0 ) {
@@ -196,6 +210,7 @@ public class TempReader {
 
                     // add a sample to the filter...
                     float heaterTemp        = ((rawHeater & THERMOCOUPLE_MASK ) >> THERMOCOUPLE_OFFSET ) /  4.0f;
+                    LOGGER.finest( "Heater temperature read: " + heaterTemp );
                     heaterFilter.addSample( new Sample( heaterTemp, Instant.now() ) );
 
                     // prune our filter...
@@ -207,6 +222,8 @@ public class TempReader {
                     // if we got a reading, and it's different than our last reading, send an event...
                     if( (reading != null) && ((lastHeaterReading == null) || (reading.value != lastHeaterReading.value)) ) {
                         publishEvent( new HeaterTemperature( reading.value, true, false, false, false, false ) );
+                        if( reading.value < 20f )
+                            LOGGER.finest( heaterFilter.toString() );
                         lastHeaterReading = reading;
                     }
                 }
@@ -222,6 +239,9 @@ public class TempReader {
                     ambientTemp = ((rawBattery & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f;
                 else if( (rawHeater & FAULT_MASK) == 0 )
                     ambientTemp = ((rawHeater  & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f;
+
+                // round our ambient temperature to the nearest quarter degree, to avoid flooding the zone with ambient temperature change events...
+                ambientTemp = Math.round( ambientTemp * 4 ) / 4f;
 
                 // if we don't have a NaN, then we have a temperature...
                 if( !Float.isNaN( ambientTemp ) ) {
@@ -241,8 +261,13 @@ public class TempReader {
     }
 
 
+    /**
+     * Publish the given event.
+     *
+     * @param _event the event to publish
+     */
     private void publishEvent( final SynchronousEvent _event ) {
-        LOGGER.finest( "Published " + _event.toString() );
+        LOGGER.finer( "Published " + _event.toString() );
         SynchronousEvents.getInstance().publish( _event );
     }
 

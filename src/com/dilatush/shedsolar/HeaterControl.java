@@ -44,6 +44,11 @@ public class HeaterControl {
     private volatile boolean         batteryTemperatureGood;
 
 
+    /**
+     * Create a new instance of this class with the given configuration.
+     *
+     * @param _config the configuration file
+     */
     public HeaterControl( final Config _config ) {
 
         dormantLowTemp             = _config.getFloatDotted( "heaterControl.dormantLowTemp"             );
@@ -85,6 +90,11 @@ public class HeaterControl {
     }
 
 
+    /**
+     * Handle a mode (production/dormant) event.
+     *
+     * @param _event the mode event
+     */
     private void handleTempModeEvent( TempMode _event ) {
 
         LOGGER.finest( _event.toString() );
@@ -93,6 +103,11 @@ public class HeaterControl {
     }
 
 
+    /**
+     * Handle a battery temperature event.
+     *
+     * @param _event the battery temperature event
+     */
     private void handleBatteryTemperatureEvent( BatteryTemperature _event ) {
 
         LOGGER.finest( _event.toString() );
@@ -102,6 +117,11 @@ public class HeaterControl {
     }
 
 
+    /**
+     * Handle a heater temperature event.
+     *
+     * @param _event the heater temperature event
+     */
     private void handleHeaterTemperatureEvent( HeaterTemperature _event ) {
 
         LOGGER.finest( _event.toString() );
@@ -111,6 +131,9 @@ public class HeaterControl {
     }
 
 
+    /**
+     * Handle the results of a temperature event (battery OR heater).
+     */
     private void handleHeater() {
 
         // if we don't have any good temperature measurements, turn the heater off, scream, and leave...
@@ -138,6 +161,9 @@ public class HeaterControl {
     }
 
 
+    /**
+     * Handles all the details of turning the heater on.
+     */
     private void turnHeaterOn() {
 
         // if we've already turned it on, just leave...
@@ -163,16 +189,22 @@ public class HeaterControl {
 
         // mark that we've turned it on...
         heaterOn = true;
+
+        // tell the rest of the world what we did...
+        SynchronousEvents.getInstance().publish( new HeaterOn() );
     }
 
 
+    /**
+     * Handles all the details of turning the heater off.
+     */
     private void turnHeaterOff() {
 
         // if we've already turned it off, just leave...
         if( !heaterOn )
             return;
 
-        LOGGER.fine( "Turning heater on" );
+        LOGGER.fine( "Turning heater off" );
 
         // record the heater temperature before we turn it off...
         heaterTemperatureBefore = heaterTemperature;
@@ -191,6 +223,9 @@ public class HeaterControl {
 
         // mark that we've turned it off...
         heaterOn = false;
+
+        // tell the rest of the world what we did...
+        SynchronousEvents.getInstance().publish( new HeaterOff() );
     }
 
 
@@ -205,10 +240,20 @@ public class HeaterControl {
         @Override
         public void run() {
 
+            // if the heater is off, just leave...
+            if( !heaterOn )
+                return;
+
             LOGGER.finest( "SSR sense: " + (ssrSense.isLow() ? "on" : "off" ) );
 
-            if( ssrSense.isHigh() && heaterOn ) {
+            // if the SSR is NOT on, scream bloody murder...
+            if( ssrSense.isHigh() ) {
                 SynchronousEvents.getInstance().publish( new SSRStuckOff() );
+            }
+
+            // otherwise, schedule a new check to make sure it STAYS on...
+            else {
+                App.instance.timer.schedule( new CheckSSROn(), delayToSSRSense );
             }
         }
     }
@@ -249,12 +294,22 @@ public class HeaterControl {
             if( !heaterTemperatureGood )
                 return;
 
+            // if the heater isn't even on, just leave...
+            if( !heaterOn )
+                return;
+
             // see if we got the expected temperature increase...
             boolean heaterWorking = (heaterTemperature - heaterTemperatureBefore) >= heaterTempDelta;
-            LOGGER.finest( "Heater on temperature change sense: " + (heaterWorking ? "working" : "not working" ) );
+            LOGGER.finest( heaterWorking ? "Heater is on" : "Heater is on, but not producing heat"  );
 
-            if( !heaterWorking && heaterOn ) {
+            // if the heater is NOT working, scream bloody murder...
+            if( !heaterWorking ) {
                 SynchronousEvents.getInstance().publish( new HeaterStuckOff() );
+            }
+
+            // otherwise, schedule a check to make sure the heater STAYS on...
+            else {
+                App.instance.timer.schedule( new CheckHeaterOn(), heaterTempDelay );
             }
         }
     }
@@ -276,7 +331,7 @@ public class HeaterControl {
 
             // see if we got the expected temperature decrease...
             boolean heaterWorking = (heaterTemperatureBefore - heaterTemperature) >= heaterTempDelta;
-            LOGGER.finest( "Heater off temperature change sense: " + (heaterWorking ? "working" : "not working" ) );
+            LOGGER.finest( heaterWorking ? "Heater is off" : "Heater is off, but still producing heat" );
 
             if( !heaterWorking && !heaterOn ) {
                 SynchronousEvents.getInstance().publish( new HeaterStuckOn() );
