@@ -4,7 +4,6 @@ import com.dilatush.shedsolar.events.*;
 import com.dilatush.util.Config;
 import com.pi4j.io.gpio.*;
 
-import java.util.TimerTask;
 import java.util.logging.Logger;
 
 import static com.dilatush.shedsolar.App.schedule;
@@ -13,8 +12,6 @@ import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
 import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
-// TODO: handle the situation where heater won't work until it cools down (thermal interlock)...
-// TODO: must handle the case where power has to be cycled to fix the thermal interlock...
 /**
  * <p>Controls the solid state relay that turns the heater on and off, and also the indicator LED (on when the heater is turned on).  It also monitors
  * the output temperature of the heater to verify that it is working correctly, and the sense relay that verifies that the SSR is working
@@ -230,11 +227,8 @@ public class HeaterControl {
     /**
      * Verify that the SSR is actually working.
      */
-    private class CheckSSROn extends TimerTask {
+    private class CheckSSROn  implements Runnable {
 
-        /**
-         * The action to be performed by this timer task.
-         */
         @Override
         public void run() {
 
@@ -260,11 +254,8 @@ public class HeaterControl {
     /**
      * Verify that the SSR is actually off.
      */
-    private class CheckSSROff extends TimerTask {
+    private class CheckSSROff  implements Runnable {
 
-        /**
-         * The action to be performed by this timer task.
-         */
         @Override
         public void run() {
 
@@ -280,11 +271,8 @@ public class HeaterControl {
     /**
      * Verify that the heater is actually working.
      */
-    private class CheckHeaterOn extends TimerTask {
+    private class CheckHeaterOn  implements Runnable {
 
-        /**
-         * The action to be performed by this timer task.
-         */
         @Override
         public void run() {
 
@@ -315,11 +303,8 @@ public class HeaterControl {
     /**
      * Verify that the heater has actually turned off.
      */
-    private class CheckHeaterOff extends TimerTask {
+    private class CheckHeaterOff  implements Runnable {
 
-        /**
-         * The action to be performed by this timer task.
-         */
         @Override
         public void run() {
 

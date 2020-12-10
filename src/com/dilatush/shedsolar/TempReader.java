@@ -14,7 +14,6 @@ import com.pi4j.io.spi.SpiFactory;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -129,7 +128,7 @@ public class TempReader {
 
 
     /**
-     * The {@link TimerTask} that does all the work of this class.
+     * The {@link Runnable} that does all the work of this class.
      */
     private class TempReaderTask implements Runnable {
 

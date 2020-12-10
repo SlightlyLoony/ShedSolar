@@ -6,10 +6,7 @@ import com.dilatush.util.test.TestOrchestrator;
 import com.pi4j.io.gpio.GpioController;
 import com.pi4j.io.gpio.GpioFactory;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -27,7 +24,8 @@ public class App {
 
     public final Config       config;
 
-    public ScheduledExecutorService scheduledExecutor;
+    public ScheduledExecutorService scheduledExecutor;  // a single-threaded scheduled executor for all to use...
+    public ExecutorService          executor;           // a single-threaded executor to do all blocking I/O on...
     public GpioController           gpio;
     public TestOrchestrator         orchestrator;
     public PostOffice               po;
@@ -49,6 +47,14 @@ public class App {
             thread.setName( "ScheduledExecutor" );
             return thread;
         } );
+
+        // set up an executor service for all to use, in a non-daemon thread...
+        executor = Executors.newSingleThreadExecutor( _runnable -> {
+            Thread thread = Executors.defaultThreadFactory().newThread( _runnable );
+            thread.setDaemon( false );
+            thread.setName( "Executor" );
+            return thread;
+        });
 
         config = _config;
         orchestrator = new TestOrchestrator( scheduledExecutor );
@@ -116,17 +122,45 @@ public class App {
     }
 
 
-    public static void setInstance( final Config _config ) {
+    /* package protected */ static void setInstance( final Config _config ) {
         instance = new App( _config );
     }
 
 
-    public static ScheduledFuture<?> schedule( final Runnable _runnable, final long _time, final TimeUnit _timeUnit ) {
-        return instance.scheduledExecutor.schedule( _runnable, _time, _timeUnit );
+    /**
+     * Schedules the given {@link Runnable} to execute once, after the given delay (in the given time units).
+     *
+     * @param _runnable the {@link Runnable} to execute
+     * @param _delay the delay before the {@link Runnable} should execute
+     * @param _timeUnit the units of the delay
+     * @return the scheduled future
+     */
+    public static ScheduledFuture<?> schedule( final Runnable _runnable, final long _delay, final TimeUnit _timeUnit ) {
+        return instance.scheduledExecutor.schedule( _runnable, _delay, _timeUnit );
     }
 
 
+    /**
+     * Schedules the given {@link Runnable} to execute repeatedly, first after the given delay (in the given time units) and then at the
+     * given interval.
+     *
+     * @param _runnable the {@link Runnable} to execute
+     * @param _delay the delay before the {@link Runnable} should execute the first time
+     * @param _interval the interval between repeated executions
+     * @param _timeUnit the units of the delay and interval
+     * @return the scheduled future
+     */
     public static ScheduledFuture<?> schedule( final Runnable _runnable, final long _delay, final long _interval, final TimeUnit _timeUnit ) {
         return instance.scheduledExecutor.scheduleAtFixedRate( _runnable, _delay, _interval, _timeUnit );
+    }
+
+
+    /**
+     * Execute the given {@link Runnable} when the blocking I/O thread becomes available.
+     *
+     * @param _runnable The {@link Runnable} to execute
+     */
+    public static void execute( final Runnable _runnable ) {
+        instance.executor.execute( _runnable );
     }
 }

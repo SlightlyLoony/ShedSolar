@@ -16,16 +16,16 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
-import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static com.dilatush.shedsolar.App.execute;
 import static com.dilatush.shedsolar.App.schedule;
 import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
 
 /**
- * Interrogates the Outback system at a given IP address or host name, every 30 seconds.
+ * Interrogates the Outback system at a configured IP address or host name, at the configured interval.
  *
  * @author Tom Dilatush  tom@dilatush.com
  */
@@ -38,11 +38,22 @@ public class Outbacker {
     private final TestException testException;
 
 
+    /**
+     * Creates a new instance of this class with the given configuration.
+     *
+     * @param _config the configuration to use when creating this instance
+     */
     public Outbacker( final Config _config ) {
+
+        // set this thing up...
         host = _config.getStringDotted( "outback.host" );
         long interval = _config.optLongDotted( "outback.interval", 60000 );
         url = getURL();
-        schedule( new OutbackerTask(), 0, interval, TimeUnit.MILLISECONDS );
+
+        // schedule the execution of the query...
+        schedule( () -> execute( new OutbackerTask() ), 0, interval, TimeUnit.MILLISECONDS );
+
+        // set up our tests...
         testException = new TestException();
         App.instance.orchestrator.registerTestInjector( testException, "Outbacker.readError" );
     }
@@ -60,11 +71,11 @@ public class Outbacker {
     }
 
 
-    private class OutbackerTask extends TimerTask {
+    /**
+     * This class does all the real work.  It executes in the blocking I/O thread provided by the app's executor service.
+     */
+    private class OutbackerTask  implements Runnable {
 
-        /**
-         * The action to be performed by this timer task.
-         */
         @Override
         public void run() {
 

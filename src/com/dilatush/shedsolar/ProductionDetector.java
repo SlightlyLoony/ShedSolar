@@ -7,7 +7,6 @@ import org.shredzone.commons.suncalc.SunTimes;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.Objects;
-import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -81,9 +80,9 @@ public class ProductionDetector {
 
 
     /**
-     * The {@link TimerTask} that does all the actual work of this class.
+     * The {@link Runnable} that does all the actual work of this class.
      */
-    private class Detector extends TimerTask {
+    private class Detector  implements Runnable {
 
          @Override
         public void run() {

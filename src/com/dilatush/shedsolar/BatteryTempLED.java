@@ -6,8 +6,6 @@ import com.pi4j.io.gpio.GpioPinDigitalOutput;
 import com.pi4j.io.gpio.PinState;
 import com.pi4j.io.gpio.RaspiPin;
 
-import java.util.TimerTask;
-
 import static com.dilatush.shedsolar.App.schedule;
 import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -93,11 +91,8 @@ public class BatteryTempLED {
     }
 
 
-    private class On extends TimerTask {
+    private class On implements Runnable {
 
-        /**
-         * The action to be performed by this timer task.
-         */
         @Override
         public void run() {
             led.setState( PinState.LOW );
@@ -114,11 +109,8 @@ public class BatteryTempLED {
     }
 
 
-    private class Off extends TimerTask {
+    private class Off  implements Runnable {
 
-        /**
-         * The action to be performed by this timer task.
-         */
         @Override
         public void run() {
             led.setState( PinState.HIGH );
