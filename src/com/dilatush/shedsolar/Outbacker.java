@@ -122,6 +122,8 @@ public class Outbacker {
                 jsonResponse = null;
             } catch( JSONException _e ) {
                 LOGGER.log( Level.SEVERE, "Error parsing Outback data", _e );
+            } catch( RuntimeException _e ) {
+                LOGGER.log( Level.SEVERE, "Unhandled exception in OutbackerTask", _e );
             }
 
             // publish an event to tell the world what happened...
@@ -133,6 +135,8 @@ public class Outbacker {
             catch( JSONException _e ) {
                 LOGGER.log( Level.WARNING, "Problem decoding Outback JSON response", _e );
                 publishEvent( new OutbackFailure() );
+            } catch( RuntimeException _e ) {
+                LOGGER.log( Level.SEVERE, "Unhandled exception in OutbackerTask", _e );
             }
         }
     }

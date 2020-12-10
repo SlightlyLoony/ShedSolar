@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static com.dilatush.shedsolar.App.schedule;
@@ -87,64 +88,69 @@ public class ProductionDetector {
          @Override
         public void run() {
 
-            // get some calculated sunrise/sunset times...
-            ZonedDateTime now     = ZonedDateTime.now();
-            Instant todaySunrise  = getSunrise( now );
-            Instant todaySunset   = getSunset( now );
+             try {
+                 // get some calculated sunrise/sunset times...
+                 ZonedDateTime now     = ZonedDateTime.now();
+                 Instant todaySunrise  = getSunrise( now );
+                 Instant todaySunset   = getSunset( now );
 
-            // this is what we're figuring out...
-            TemperatureMode mode;
+                 // this is what we're figuring out...
+                 TemperatureMode mode;
 
-            // if we have no solar power data at all, then we'll rely exclusively on sunrise/sunset times...
-            if( !(weatherGood || outbackGood) ) {
+                 // if we have no solar power data at all, then we'll rely exclusively on sunrise/sunset times...
+                 if( !(weatherGood || outbackGood) ) {
 
-                mode = (now.toInstant().isAfter( todaySunrise ) && now.toInstant().isBefore( todaySunset )) ? PRODUCTION : DORMANT;
-            }
+                     mode = (now.toInstant().isAfter( todaySunrise ) && now.toInstant().isBefore( todaySunset )) ? PRODUCTION : DORMANT;
+                 }
 
-            // otherwise, we'll incorporate the solar power data into our thinking...
-            else {
+                 // otherwise, we'll incorporate the solar power data into our thinking...
+                 else {
 
-                // if the current time is before sunrise or after sunset, then we're going hard dormant...
-                if( now.toInstant().isBefore( todaySunrise ) || now.toInstant().isAfter( todaySunset )) {
-                    mode = DORMANT;
-                }
+                     // if the current time is before sunrise or after sunset, then we're going hard dormant...
+                     if( now.toInstant().isBefore( todaySunrise ) || now.toInstant().isAfter( todaySunset )) {
+                         mode = DORMANT;
+                     }
 
-                // if it's daytime and we have pyrometer data, we'll use that, as it's simple and direct...
-                else if( weatherGood ) {
+                     // if it's daytime and we have pyrometer data, we'll use that, as it's simple and direct...
+                     else if( weatherGood ) {
 
-                    mode = (pyrometerPower > pyrometerThreshold) ? PRODUCTION : DORMANT;
-                }
+                         mode = (pyrometerPower > pyrometerThreshold) ? PRODUCTION : DORMANT;
+                     }
 
-                // otherwise, we'll use the solar panel data - voltage and current...
-                else {
-                    mode = ((panelCurrent > 0) && (panelVoltage > panelThreshold)) ? PRODUCTION : DORMANT;
-                }
-            }
+                     // otherwise, we'll use the solar panel data - voltage and current...
+                     else {
+                         mode = ((panelCurrent > 0) && (panelVoltage > panelThreshold)) ? PRODUCTION : DORMANT;
+                     }
+                 }
 
-            // if the last mode and this mode are the same, reset our minutes counter and leave...
-            if( mode == lastMode ) {
-                minutesSinceChange = 0;
-                return;
-            }
+                 // if the last mode and this mode are the same, reset our minutes counter and leave...
+                 if( mode == lastMode ) {
+                     minutesSinceChange = 0;
+                     return;
+                 }
 
-            // otherwise, bump our minutes counter and see if we're transitioning...
-            minutesSinceChange++;
-            if( (lastMode == PRODUCTION) && (minutesSinceChange >= toDormantDelay) ) {
+                 // otherwise, bump our minutes counter and see if we're transitioning...
+                 minutesSinceChange++;
+                 if( (lastMode == PRODUCTION) && (minutesSinceChange >= toDormantDelay) ) {
 
-                // it's time to transition to dormant mode...
-                lastMode = DORMANT;
-                minutesSinceChange = 0;
-                publishEvent( new TempMode( lastMode ) );
+                     // it's time to transition to dormant mode...
+                     lastMode = DORMANT;
+                     minutesSinceChange = 0;
+                     publishEvent( new TempMode( lastMode ) );
 
-            }
-            else if( (lastMode == DORMANT) && (minutesSinceChange >= toProductionDelay) ) {
+                 }
+                 else if( (lastMode == DORMANT) && (minutesSinceChange >= toProductionDelay) ) {
 
-                // it's time to transition to production mode...
-                lastMode = PRODUCTION;
-                minutesSinceChange = 0;
-                publishEvent( new TempMode( lastMode ) );
-            }
-        }
+                     // it's time to transition to production mode...
+                     lastMode = PRODUCTION;
+                     minutesSinceChange = 0;
+                     publishEvent( new TempMode( lastMode ) );
+                 }
+             }
+             catch( RuntimeException _e ) {
+                 LOGGER.log( Level.SEVERE, "Unhandled exception in ProductionDetector.Detector", _e );
+             }
+         }
     }
 
 

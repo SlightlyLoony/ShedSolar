@@ -253,10 +253,10 @@ public class TempReader {
                     }
                 }
             }
-            catch( Exception _e ) {
+            catch( RuntimeException _e ) {
 
-                // by definition, any exception caught here is, well, exception!
-                LOGGER.log( Level.SEVERE, "Caught unhandled, unexpected exception in TempReading", _e );
+                // by definition, any exception caught here is, well, exceptional!
+                LOGGER.log( Level.SEVERE, "Unhandled exception in TempReading", _e );
             }
         }
     }
