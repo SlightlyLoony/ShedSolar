@@ -1,12 +1,7 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.shedsolar.events.OutbackReading;
-import com.dilatush.shedsolar.events.TempMode;
-import com.dilatush.shedsolar.events.Weather;
+import com.dilatush.shedsolar.events.*;
 import com.dilatush.util.Config;
-import com.dilatush.util.syncevents.SubscribeEvent;
-import com.dilatush.util.syncevents.SubscriptionDefinition;
-import com.dilatush.util.syncevents.SynchronousEvents;
 import org.shredzone.commons.suncalc.SunTimes;
 
 import java.time.Instant;
@@ -17,6 +12,8 @@ import java.util.logging.Logger;
 
 import static com.dilatush.shedsolar.TemperatureMode.DORMANT;
 import static com.dilatush.shedsolar.TemperatureMode.PRODUCTION;
+import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
+import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
 
 /**
  * Keeps track of transitions between periods of possible solar production and periods of solar system dormancy, using information about solar panel
@@ -67,21 +64,14 @@ public class ProductionDetector {
         minutesSinceChange = 0;
         lastMode           = PRODUCTION;    // we assume production mode on startup, just to be safe...
 
-        // subscribe to weather events...
-        SynchronousEvents.getInstance().publish(
-                new SubscribeEvent(
-                        new SubscriptionDefinition( event -> handleWeatherEvent( (Weather) event ), Weather.class ) )
-        );
-
-        // subscribe to Outback data events...
-        SynchronousEvents.getInstance().publish(
-                new SubscribeEvent(
-                        new SubscriptionDefinition( event -> handleOutbackReadingEvent( (OutbackReading) event ), OutbackReading.class )
-                )
-        );
+        // subscribe to the events we need to listen to...
+        subscribeToEvent( event -> handleWeatherEvent(        (Weather) event        ), Weather.class        );
+        subscribeToEvent( event -> handleWeatherFailureEvent( (WeatherFailure) event ), WeatherFailure.class );
+        subscribeToEvent( event -> handleOutbackReadingEvent( (OutbackReading) event ), OutbackReading.class );
+        subscribeToEvent( event -> handleOutbackFailureEvent( (OutbackFailure) event ), OutbackFailure.class );
 
         // announce our default production mode...
-        SynchronousEvents.getInstance().publish( new TempMode( lastMode ) );
+        publishEvent( new TempMode( lastMode ) );
 
         // schedule our detector...
         App.instance.timer.schedule( new Detector(), interval, interval );
@@ -143,7 +133,7 @@ public class ProductionDetector {
                 // it's time to transition to dormant mode...
                 lastMode = DORMANT;
                 minutesSinceChange = 0;
-                SynchronousEvents.getInstance().publish( new TempMode( lastMode ) );
+                publishEvent( new TempMode( lastMode ) );
 
             }
             else if( (lastMode == DORMANT) && (minutesSinceChange >= toProductionDelay) ) {
@@ -151,7 +141,7 @@ public class ProductionDetector {
                 // it's time to transition to production mode...
                 lastMode = PRODUCTION;
                 minutesSinceChange = 0;
-                SynchronousEvents.getInstance().publish( new TempMode( lastMode ) );
+                publishEvent( new TempMode( lastMode ) );
             }
         }
     }
@@ -162,7 +152,7 @@ public class ProductionDetector {
      *
      * @param _event the Outback reading event
      */
-    public void handleOutbackReadingEvent( final OutbackReading _event ) {
+    private void handleOutbackReadingEvent( final OutbackReading _event ) {
         outbackGood = true;
         panelVoltage = (float) _event.outbackData.panelVoltage;
         panelCurrent = (float) _event.outbackData.panelCurrent;
@@ -175,7 +165,7 @@ public class ProductionDetector {
      *
      * @param _event the weather event
      */
-    public void handleWeatherEvent( final Weather _event ) {
+    private void handleWeatherEvent( final Weather _event ) {
         weatherGood = true;
         pyrometerPower = (float) _event.irradiance;
         LOGGER.finest( _event.toString() );
@@ -187,7 +177,7 @@ public class ProductionDetector {
      *
      * @param _event the Outback reading event
      */
-    public void handleOutbackFailureEvent( final OutbackReading _event ) {
+    private void handleOutbackFailureEvent( final OutbackFailure _event ) {
         outbackGood = false;
         LOGGER.finest( _event.toString() );
     }
@@ -198,7 +188,7 @@ public class ProductionDetector {
      *
      * @param _event the weather event
      */
-    public void handleWeatherFailureEvent( final Weather _event ) {
+    private void handleWeatherFailureEvent( final WeatherFailure _event ) {
         weatherGood = false;
         LOGGER.finest( _event.toString() );
     }

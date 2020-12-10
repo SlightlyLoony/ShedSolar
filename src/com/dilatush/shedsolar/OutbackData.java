@@ -4,7 +4,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.text.DecimalFormat;
 import java.time.Instant;
 import java.util.logging.Logger;
 
@@ -15,7 +14,6 @@ import java.util.logging.Logger;
  */
 public class OutbackData {
 
-    private static final DecimalFormat df = new DecimalFormat( "0.##" );
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
     public final Instant timestamp;

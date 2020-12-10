@@ -1,6 +1,5 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.mop.PostOffice;
 import com.dilatush.util.Config;
 import com.dilatush.util.syncevents.SynchronousEvents;
 

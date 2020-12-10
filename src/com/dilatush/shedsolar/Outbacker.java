@@ -4,7 +4,6 @@ import com.dilatush.shedsolar.events.OutbackFailure;
 import com.dilatush.shedsolar.events.OutbackReading;
 import com.dilatush.util.Config;
 import com.dilatush.util.syncevents.SynchronousEvent;
-import com.dilatush.util.syncevents.SynchronousEvents;
 import com.dilatush.util.test.ATestInjector;
 import com.dilatush.util.test.TestInjector;
 import org.json.JSONException;
@@ -20,6 +19,8 @@ import java.net.URL;
 import java.util.TimerTask;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
 
 /**
  * Interrogates the Outback system at a given IP address or host name, every 30 seconds.
@@ -113,12 +114,12 @@ public class Outbacker {
             // publish an event to tell the world what happened...
             try {
                 SynchronousEvent event = (jsonResponse != null) ? new OutbackReading( new OutbackData( jsonResponse ) ) : new OutbackFailure();
-                SynchronousEvents.getInstance().publish( event );
+                publishEvent( event );
                 LOGGER.finest( event.toString() );
             }
             catch( JSONException _e ) {
                 LOGGER.log( Level.WARNING, "Problem decoding Outback JSON response", _e );
-                SynchronousEvents.getInstance().publish( new OutbackFailure() );
+                publishEvent( new OutbackFailure() );
             }
         }
     }

@@ -6,13 +6,14 @@ import com.dilatush.mop.PostOffice;
 import com.dilatush.shedsolar.events.CPOFailure;
 import com.dilatush.shedsolar.events.Weather;
 import com.dilatush.shedsolar.events.WeatherFailure;
-import com.dilatush.util.syncevents.SynchronousEvents;
 import com.dilatush.util.test.ATestInjector;
 import org.json.JSONException;
 
 import java.util.TimerTask;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
 
 /**
  * Provides an MOP actor that provides the mailbox "shedsolar.main" and listens for once-per-minute weather reports.  Additionally this class checks
@@ -78,7 +79,7 @@ public class ShedSolarActor extends Actor {
             LOGGER.finest( String.format( "Weather message, solar irradiance is %1$.0f watts/meter2, temperature is %2$.1fC", solar, temp ) );
 
             // send an event with this data...
-            SynchronousEvents.getInstance().publish( new Weather( solar, temp ) );
+            publishEvent( new Weather( solar, temp ) );
 
             // start a new checker...
             checker = new Checker();
@@ -102,7 +103,7 @@ public class ShedSolarActor extends Actor {
         public void run() {
 
             // send a weather failure event...
-            SynchronousEvents.getInstance().publish( new WeatherFailure() );
+            publishEvent( new WeatherFailure() );
 
             // this time wait longer before we send the next one...
             checker = new Checker();
@@ -113,7 +114,7 @@ public class ShedSolarActor extends Actor {
             // a little problem analysis here...
             // if we've lost connection to the post office, publish an event to that effect...
             if( !App.instance.po.isConnected() ) {
-                SynchronousEvents.getInstance().publish( new CPOFailure() );
+                publishEvent( new CPOFailure() );
             }
 
             // otherwise, try re-subscribing...

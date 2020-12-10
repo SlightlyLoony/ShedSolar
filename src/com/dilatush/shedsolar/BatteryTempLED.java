@@ -2,15 +2,13 @@ package com.dilatush.shedsolar;
 
 import com.dilatush.shedsolar.events.BatteryTemperature;
 import com.dilatush.util.Config;
-import com.dilatush.util.syncevents.SubscribeEvent;
-import com.dilatush.util.syncevents.SubscriptionDefinition;
-import com.dilatush.util.syncevents.SynchronousEvent;
-import com.dilatush.util.syncevents.SynchronousEvents;
 import com.pi4j.io.gpio.GpioPinDigitalOutput;
 import com.pi4j.io.gpio.PinState;
 import com.pi4j.io.gpio.RaspiPin;
 
 import java.util.TimerTask;
+
+import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
 
 /**
  * <p>Controls the battery temperature LED.</p>
@@ -57,9 +55,7 @@ public class BatteryTempLED {
         led.setShutdownOptions( true, PinState.HIGH );
 
         // subscribe to battery temperature readings...
-        SynchronousEvents.getInstance().publish(
-                new SubscribeEvent( new SubscriptionDefinition( this::handleBatteryTempEvent, BatteryTemperature.class ) )
-        );
+        subscribeToEvent( event -> handleBatteryTempEvent( (BatteryTemperature) event ), BatteryTemperature.class );
     }
 
 
@@ -68,13 +64,11 @@ public class BatteryTempLED {
      *
      * @param _event the battery temperature event
      */
-    public void handleBatteryTempEvent( final SynchronousEvent _event ) {
-
-        BatteryTemperature be = (BatteryTemperature) _event;
+    public void handleBatteryTempEvent( final BatteryTemperature _event ) {
 
         // record our latest battery temperature information...
-        goodBatteryTemp = be.goodMeasurement;
-        batteryTemp = be.degreesC;
+        goodBatteryTemp = _event.goodMeasurement;
+        batteryTemp = _event.degreesC;
 
         // if we haven't yet started the LED flashing, do so now...
         if( !started ) {

@@ -2,20 +2,27 @@ package com.dilatush.shedsolar;
 
 import com.dilatush.shedsolar.events.*;
 import com.dilatush.util.Config;
-import com.dilatush.util.syncevents.SubscribeEvent;
-import com.dilatush.util.syncevents.SubscriptionDefinition;
-import com.dilatush.util.syncevents.SynchronousEvents;
 import com.pi4j.io.gpio.*;
 
 import java.util.TimerTask;
 import java.util.logging.Logger;
 
 import static com.dilatush.shedsolar.TemperatureMode.PRODUCTION;
+import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
+import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
 
+// TODO: handle the situation where heater won't work until it cools down (thermal interlock)...
+// TODO: must handle the case where power has to be cycled to fix the thermal interlock...
 /**
  * <p>Controls the solid state relay that turns the heater on and off, and also the indicator LED (on when the heater is turned on).  It also monitors
  * the output temperature of the heater to verify that it is working correctly, and the sense relay that verifies that the SSR is working
  * correctly.</p>
+ * <p>The heater we're using (a Brightown 250 watt ceramic heater with a fan) has an interesting characteristic: it includes a "thermal fuse" that
+ * shuts down the heater if it overheats.  We've never seen this shutdown while the heater is on, but we <i>have</i> seen it happen after the
+ * heater has been shut off, and then turned back on again.  We speculate that the ceramic heating element has enough thermal inertia that when the
+ * heater is shut off (with the fan stopping immediately), heat can then "leak" from the heater to the thermal sensor, wherever that is.  This
+ * causes the heater to <i>not</i> turn on in this circumstance.  Once this fuse has engaged, there's a lengthy cool-down period required before
+ * it will work again.  A bit of experimenting suggests that power needs to be cycled off for 2 or 3 minutes to get it to work again.</p>
  *
  * @author Tom Dilatush  tom@dilatush.com
  */
@@ -73,20 +80,9 @@ public class HeaterControl {
         heaterOn = false;
 
         // subscribe to the events we want to monitor...
-        SynchronousEvents.getInstance().publish(
-                new SubscribeEvent(
-                        new SubscriptionDefinition( event -> handleTempModeEvent( (TempMode) event ), TempMode.class ) )
-        );
-        SynchronousEvents.getInstance().publish(
-                new SubscribeEvent(
-                        new SubscriptionDefinition( event -> handleBatteryTemperatureEvent( (BatteryTemperature) event ), BatteryTemperature.class ) )
-        );
-        SynchronousEvents.getInstance().publish(
-                new SubscribeEvent(
-                        new SubscriptionDefinition( event -> handleHeaterTemperatureEvent( (HeaterTemperature) event ), HeaterTemperature.class ) )
-        );
-
-
+        subscribeToEvent( event -> handleTempModeEvent(           (TempMode)           event ), TempMode.class           );
+        subscribeToEvent( event -> handleBatteryTemperatureEvent( (BatteryTemperature) event ), BatteryTemperature.class );
+        subscribeToEvent( event -> handleHeaterTemperatureEvent(  (HeaterTemperature)  event ), HeaterTemperature.class  );
     }
 
 
@@ -139,7 +135,7 @@ public class HeaterControl {
         // if we don't have any good temperature measurements, turn the heater off, scream, and leave...
         if( !batteryTemperatureGood && !heaterTemperatureGood ) {
             turnHeaterOff();
-            SynchronousEvents.getInstance().publish( new HeaterControlAbort() );
+            publishEvent( new HeaterControlAbort() );
             return;
         }
 
@@ -191,7 +187,7 @@ public class HeaterControl {
         heaterOn = true;
 
         // tell the rest of the world what we did...
-        SynchronousEvents.getInstance().publish( new HeaterOn() );
+        publishEvent( new HeaterOn() );
     }
 
 
@@ -225,7 +221,7 @@ public class HeaterControl {
         heaterOn = false;
 
         // tell the rest of the world what we did...
-        SynchronousEvents.getInstance().publish( new HeaterOff() );
+        publishEvent( new HeaterOff() );
     }
 
 
@@ -248,7 +244,7 @@ public class HeaterControl {
 
             // if the SSR is NOT on, scream bloody murder...
             if( ssrSense.isHigh() ) {
-                SynchronousEvents.getInstance().publish( new SSRStuckOff() );
+                publishEvent( new SSRStuckOff() );
             }
 
             // otherwise, schedule a new check to make sure it STAYS on...
@@ -273,7 +269,7 @@ public class HeaterControl {
             LOGGER.finest( "SSR sense: " + (ssrSense.isLow() ? "on" : "off" ) );
 
             if( ssrSense.isLow() && !heaterOn ) {
-                SynchronousEvents.getInstance().publish( new SSRStuckOn() );
+                publishEvent( new SSRStuckOn() );
             }
         }
     }
@@ -304,7 +300,7 @@ public class HeaterControl {
 
             // if the heater is NOT working, scream bloody murder...
             if( !heaterWorking ) {
-                SynchronousEvents.getInstance().publish( new HeaterStuckOff() );
+                publishEvent( new HeaterStuckOff() );
             }
 
             // otherwise, schedule a check to make sure the heater STAYS on...
@@ -334,7 +330,7 @@ public class HeaterControl {
             LOGGER.finest( heaterWorking ? "Heater is off" : "Heater is off, but still producing heat" );
 
             if( !heaterWorking && !heaterOn ) {
-                SynchronousEvents.getInstance().publish( new HeaterStuckOn() );
+                publishEvent( new HeaterStuckOn() );
             }
         }
     }

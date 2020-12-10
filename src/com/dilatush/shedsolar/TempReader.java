@@ -7,8 +7,6 @@ import com.dilatush.util.Config;
 import com.dilatush.util.noisefilter.Distance;
 import com.dilatush.util.noisefilter.NoiseFilter;
 import com.dilatush.util.noisefilter.Sample;
-import com.dilatush.util.syncevents.SynchronousEvent;
-import com.dilatush.util.syncevents.SynchronousEvents;
 import com.dilatush.util.test.ATestInjector;
 import com.pi4j.io.spi.SpiChannel;
 import com.pi4j.io.spi.SpiDevice;
@@ -19,6 +17,8 @@ import java.time.Instant;
 import java.util.TimerTask;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
 
 /**
  * <p>Implements a temperature reader for two MAX31855 type K thermocouple interface chips, one for battery temperature and the other for
@@ -258,17 +258,6 @@ public class TempReader {
                 LOGGER.log( Level.SEVERE, "Caught unhandled, unexpected exception in TempReading", _e );
             }
         }
-    }
-
-
-    /**
-     * Publish the given event.
-     *
-     * @param _event the event to publish
-     */
-    private void publishEvent( final SynchronousEvent _event ) {
-        LOGGER.finer( "Published " + _event.toString() );
-        SynchronousEvents.getInstance().publish( _event );
     }
 
 
