@@ -8,7 +8,9 @@ import com.pi4j.io.gpio.RaspiPin;
 
 import java.util.TimerTask;
 
+import static com.dilatush.shedsolar.App.schedule;
 import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
  * <p>Controls the battery temperature LED.</p>
@@ -101,12 +103,12 @@ public class BatteryTempLED {
             led.setState( PinState.LOW );
 
             if( goodBatteryTemp ) {
-                App.instance.timer.schedule( new Off(), onMS( batteryTemp ) );
-                App.instance.timer.schedule( new On(), normalInterval );
+                schedule( new Off(), onMS( batteryTemp ), MILLISECONDS );
+                schedule( new On(), normalInterval, MILLISECONDS );
             }
             else {
-                App.instance.timer.schedule( new Off(), errorInterval / 2 );
-                App.instance.timer.schedule( new On(), errorInterval );
+                schedule( new Off(), errorInterval / 2, MILLISECONDS );
+                schedule( new On(), errorInterval, MILLISECONDS );
             }
         }
     }

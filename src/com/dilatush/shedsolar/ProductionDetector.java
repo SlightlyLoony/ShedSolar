@@ -8,8 +8,10 @@ import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.Objects;
 import java.util.TimerTask;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
+import static com.dilatush.shedsolar.App.schedule;
 import static com.dilatush.shedsolar.TemperatureMode.DORMANT;
 import static com.dilatush.shedsolar.TemperatureMode.PRODUCTION;
 import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
@@ -74,7 +76,7 @@ public class ProductionDetector {
         publishEvent( new TempMode( lastMode ) );
 
         // schedule our detector...
-        App.instance.timer.schedule( new Detector(), interval, interval );
+        schedule( new Detector(), interval, interval, TimeUnit.MILLISECONDS );
     }
 
 

@@ -7,9 +7,11 @@ import com.pi4j.io.gpio.*;
 import java.util.TimerTask;
 import java.util.logging.Logger;
 
+import static com.dilatush.shedsolar.App.schedule;
 import static com.dilatush.shedsolar.TemperatureMode.PRODUCTION;
 import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
 import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 // TODO: handle the situation where heater won't work until it cools down (thermal interlock)...
 // TODO: must handle the case where power has to be cycled to fix the thermal interlock...
@@ -178,10 +180,10 @@ public class HeaterControl {
         heaterPowerLED.low();
 
         // schedule a check to verify the SSR actually turned on...
-        App.instance.timer.schedule( new CheckSSROn(), delayToSSRSense );
+        schedule( new CheckSSROn(), delayToSSRSense, MILLISECONDS );
 
         // schedule a check to verify the heater actually turned on...
-        App.instance.timer.schedule( new CheckHeaterOn(), heaterTempDelay );
+        schedule( new CheckHeaterOn(), heaterTempDelay, MILLISECONDS );
 
         // mark that we've turned it on...
         heaterOn = true;
@@ -212,10 +214,10 @@ public class HeaterControl {
         heaterPowerLED.high();
 
         // schedule a check to verify the SSR actually turned off...
-        App.instance.timer.schedule( new CheckSSROff(), delayToSSRSense );
+        schedule( new CheckSSROff(), delayToSSRSense, MILLISECONDS );
 
         // schedule a check to verify the heater actually turned off...
-        App.instance.timer.schedule( new CheckHeaterOff(), heaterTempDelay );
+        schedule( new CheckHeaterOff(), heaterTempDelay, MILLISECONDS );
 
         // mark that we've turned it off...
         heaterOn = false;
@@ -249,7 +251,7 @@ public class HeaterControl {
 
             // otherwise, schedule a new check to make sure it STAYS on...
             else {
-                App.instance.timer.schedule( new CheckSSROn(), delayToSSRSense );
+                schedule( new CheckSSROn(), delayToSSRSense, MILLISECONDS );
             }
         }
     }
@@ -305,7 +307,7 @@ public class HeaterControl {
 
             // otherwise, schedule a check to make sure the heater STAYS on...
             else {
-                App.instance.timer.schedule( new CheckHeaterOn(), heaterTempDelay );
+                schedule( new CheckHeaterOn(), heaterTempDelay, MILLISECONDS );
             }
         }
     }

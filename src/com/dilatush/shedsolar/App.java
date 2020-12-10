@@ -6,7 +6,10 @@ import com.dilatush.util.test.TestOrchestrator;
 import com.pi4j.io.gpio.GpioController;
 import com.pi4j.io.gpio.GpioFactory;
 
-import java.util.Timer;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -24,11 +27,11 @@ public class App {
 
     public final Config       config;
 
-    public Timer            timer;
-    public GpioController   gpio;
-    public TestOrchestrator orchestrator;
-    public PostOffice       po;
-    public ShedSolarActor   actor;
+    public ScheduledExecutorService scheduledExecutor;
+    public GpioController           gpio;
+    public TestOrchestrator         orchestrator;
+    public PostOffice               po;
+    public ShedSolarActor           actor;
 
     // these are public ONLY to suppress some bogus warnings that occur because the compiler doesn't understand singletons...
     public BatteryTempLED     batteryTempLED;
@@ -39,11 +42,16 @@ public class App {
 
     private App( final Config _config ) {
 
-        // set up a timer for all to use, in a non-daemon thread...
-        timer = new Timer( "Timer", false );
+        // set up a scheduled executor service for all to use, in a non-daemon thread...
+        scheduledExecutor = Executors.newSingleThreadScheduledExecutor( _runnable -> {
+            Thread thread = Executors.defaultThreadFactory().newThread( _runnable );
+            thread.setDaemon( false );
+            thread.setName( "ScheduledExecutor" );
+            return thread;
+        } );
 
         config = _config;
-        orchestrator = new TestOrchestrator( timer );
+        orchestrator = new TestOrchestrator( scheduledExecutor );
     }
 
     public void run() {
@@ -110,5 +118,15 @@ public class App {
 
     public static void setInstance( final Config _config ) {
         instance = new App( _config );
+    }
+
+
+    public static ScheduledFuture<?> schedule( final Runnable _runnable, final long _time, final TimeUnit _timeUnit ) {
+        return instance.scheduledExecutor.schedule( _runnable, _time, _timeUnit );
+    }
+
+
+    public static ScheduledFuture<?> schedule( final Runnable _runnable, final long _delay, final long _interval, final TimeUnit _timeUnit ) {
+        return instance.scheduledExecutor.scheduleAtFixedRate( _runnable, _delay, _interval, _timeUnit );
     }
 }
