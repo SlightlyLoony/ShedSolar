@@ -61,6 +61,7 @@ These are the codes displayed by the status indicator.  There may be multiple st
 | Code   | Status |
 | :------| :---|
 | 0      | Ok - no problems detected|
+| 1      | State of charge under 20%|
 | 10     | Batteries undertemperature|
 | 11     | Batteries overtemperature|
 | 00     | Barn router unreachable|

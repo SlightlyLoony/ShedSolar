@@ -6,7 +6,6 @@ import com.dilatush.mop.PostOffice;
 import com.dilatush.shedsolar.events.CPOFailure;
 import com.dilatush.shedsolar.events.Weather;
 import com.dilatush.shedsolar.events.WeatherFailure;
-import com.dilatush.util.test.ATestInjector;
 import org.json.JSONException;
 
 import java.util.concurrent.ScheduledFuture;
@@ -33,7 +32,6 @@ public class ShedSolarActor extends Actor {
     private static final String mailboxName = "main";
 
     private volatile ScheduledFuture<?> checker;
-    private final    CheckerTester      checkerTester;
 
     /**
      * Creates a new instance of this class, using the given post office and creating a mailbox with the given name.
@@ -42,10 +40,6 @@ public class ShedSolarActor extends Actor {
      */
     public ShedSolarActor( final PostOffice _po ) {
         super( _po, mailboxName );
-
-        // make our testers...
-        checkerTester = new CheckerTester();
-        App.instance.orchestrator.registerTestInjector( checkerTester, "ShedSolarActor.checker" );
 
         // start our checker going (to see if we're receiving weather reports)...
         checker = schedule( new Checker(), MAX_WEATHER_REPORT_DELAY, TimeUnit.MILLISECONDS );
@@ -67,9 +61,6 @@ public class ShedSolarActor extends Actor {
     private void handleWeatherReport( final Message _message ) {
 
         try {
-            // if we're testing the checker, just leave...
-            if( checkerTester.inject( true ) )
-                return;
 
             // cancel our checker...
             checker.cancel( true );
@@ -120,18 +111,6 @@ public class ShedSolarActor extends Actor {
             else {
                 mailbox.subscribe( "weather.weather", "minute.report" );
             }
-        }
-    }
-
-
-    /**
-     * Test injector to enable or disable testing weather data message failure.
-     */
-    private static class CheckerTester extends ATestInjector<Boolean> {
-
-        @Override
-        public Boolean inject( final Boolean _boolean ) {
-            return enabled;
         }
     }
 }

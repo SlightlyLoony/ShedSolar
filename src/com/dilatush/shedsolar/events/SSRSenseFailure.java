@@ -7,7 +7,15 @@ import com.dilatush.util.syncevents.SynchronousEvent;
  */
 public class SSRSenseFailure implements SynchronousEvent {
 
+    public final String description;
+
+
+    public SSRSenseFailure( final String _description ) {
+        description = _description;
+    }
+
+
     public String toString() {
-        return "SSR sense relay failure";
+        return "SSR sense relay failure: " + description;
     }
 }

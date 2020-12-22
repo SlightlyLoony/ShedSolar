@@ -1,10 +1,12 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.shedsolar.events.BatteryTemperature;
-import com.dilatush.util.Config;
+import com.dilatush.util.AConfig;
 import com.pi4j.io.gpio.GpioPinDigitalOutput;
 import com.pi4j.io.gpio.PinState;
 import com.pi4j.io.gpio.RaspiPin;
+
+import java.util.logging.Logger;
 
 import static com.dilatush.shedsolar.App.schedule;
 import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
@@ -13,13 +15,16 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 /**
  * <p>Controls the battery temperature LED.</p>
  * <p>This LED normally flashes at a fixed interval, but the duty cycle of the flash is proportional to the battery temperature.  The duty cycle is 0%
- * (LED completely off) when the battery is at or below the lowest operable temperture, and is 100% (LED completely on) when the battery is at or
+ * (LED completely off) when the battery is at or below the lowest operable temperature, and is 100% (LED completely on) when the battery is at or
  * above its highest operable temperature.</p>
  * <p>If the battery temperature cannot be read for any reason, the LED flashes very quickly at a constant rate.</p>
  *
  * @author Tom Dilatush  tom@dilatush.com
  */
 public class BatteryTempLED {
+
+    @SuppressWarnings( "unused" )
+    private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
     private final float                minTemp;
     private final float                maxTemp;
@@ -35,17 +40,17 @@ public class BatteryTempLED {
 
 
     /**
-     * Creates a new instance of this class, configured by the given configuration file.
+     * Creates a new instance of this class, configured by the given {@link Config}.
      *
      * @param _config the configuration file for this app
      */
     public BatteryTempLED( final Config _config ) {
 
         // get our configuration...
-        minTemp        = _config.optFloatDotted( "batteryTemperatureLED.minTemp",         0.0f );
-        maxTemp        = _config.optFloatDotted( "batteryTemperatureLED.maxTemp",        45.0f );
-        normalInterval = _config.optLongDotted(  "batteryTemperatureLED.normalInterval", 2000  );
-        errorInterval  = _config.optLongDotted(  "batteryTemperatureLED.errorInterval",   400  );
+        minTemp        = _config.minTemp;
+        maxTemp        = _config.maxTemp;
+        normalInterval = _config.normalInterval;
+        errorInterval  = _config.errorInterval;
 
         batteryTemp = 0;
         started = false;
@@ -56,6 +61,57 @@ public class BatteryTempLED {
 
         // subscribe to battery temperature readings...
         subscribeToEvent( event -> handleBatteryTempEvent( (BatteryTemperature) event ), BatteryTemperature.class );
+    }
+
+
+    /**
+     * Validatable POJO for configuring {@link BatteryTempLED} (see {@link BatteryTempLED#BatteryTempLED(Config)}).
+     */
+    public static class Config extends AConfig {
+
+        /**
+         * The minimum battery temperature (in degrees Celcius) that can be shown by the battery temperature LED (when the LED is solid off).  This
+         * value must be less than the value of {@link #maxTemp}, and must be in the range [-5.0..60.0].
+         */
+        public float minTemp        = 0.0f;
+
+        /**
+         * The maximum battery temperature (in degrees Celcius) that can be shown by the battery temperature LED (when the LED is solidly on).  This
+         * value must be greater than the value of {@link #minTemp}, and must be in the range [-5.0..60.0].
+         */
+        public float maxTemp        = 45.0f;
+
+        /**
+         * The interval, in milliseconds, between the start of each normal flash of the battery temperature LED, indicating that the battery
+         * temperature can be read.
+         */
+        public long  normalInterval = 2000;
+
+        /**
+         * The interval, in milliseconds, between the start of each error flash of the battery temperature LED, indicating that the battery
+         * temperature cannot be read.
+         */
+        public long  errorInterval  = 400;
+
+
+        /**
+         * Verify the fields of this configuration.
+         */
+        @Override
+        protected void verify() {
+            validate( () -> minTemp < maxTemp,
+                    "Battery Temperature LED minimum temperature is not less than the maximum temperature: " + minTemp );
+            validate( () -> ((minTemp >= -5) && (minTemp <= 60)),
+                    "Battery Temperature LED minimum temperature is out of range: " + minTemp );
+            validate( () -> ((maxTemp >= -5) && (maxTemp <= 60)),
+                    "Battery Temperature LED maximum temperature is out of range: " + maxTemp );
+            validate( () -> ((normalInterval >= 500) && (normalInterval <= 5000)),
+                    "Battery Temperature LED normal interval is out of range: " + normalInterval );
+            validate( () -> ((errorInterval >= 250) && (errorInterval <= 2500)),
+                    "Battery Temperature LED error interval is out of range: " + errorInterval );
+            validate( () -> errorInterval * 2 <  normalInterval,
+                    "Battery Temperature LED error interval more than half the normal interval: " + errorInterval );
+        }
     }
 
 

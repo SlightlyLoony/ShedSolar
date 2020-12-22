@@ -9,7 +9,6 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="pi4j-core" level="project" />
     <orderEntry type="library" name="commons-suncalc-3.4" level="project" />
-    <orderEntry type="library" name="Util" level="project" />
     <orderEntry type="library" name="MOP" level="project" />
   </component>
 </module>

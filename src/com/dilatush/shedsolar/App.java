@@ -1,8 +1,6 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.mop.PostOffice;
-import com.dilatush.util.Config;
-import com.dilatush.util.test.TestOrchestrator;
 import com.pi4j.io.gpio.GpioController;
 import com.pi4j.io.gpio.GpioFactory;
 
@@ -27,7 +25,6 @@ public class App {
     public ScheduledExecutorService scheduledExecutor;  // a single-threaded scheduled executor for all to use...
     public ExecutorService          executor;           // a single-threaded executor to do all blocking I/O on...
     public GpioController           gpio;
-    public TestOrchestrator         orchestrator;
     public PostOffice               po;
     public ShedSolarActor           actor;
 
@@ -57,7 +54,6 @@ public class App {
         });
 
         config = _config;
-        orchestrator = new TestOrchestrator( scheduledExecutor );
     }
 
     public void run() {
@@ -68,25 +64,22 @@ public class App {
             gpio = GpioFactory.getInstance();
 
             // set up our battery temperature LED...
-            batteryTempLED = new BatteryTempLED( config );
+            batteryTempLED = new BatteryTempLED( config.batteryTempLED );
 
             // set up our Outback interrogator...
-            outbacker = new Outbacker( config );
+            outbacker = new Outbacker( config.outbacker );
 
             // set up our production/dormancy discriminator...
-            productionDetector = new ProductionDetector( config );
+            productionDetector = new ProductionDetector( config.productionDetector );
 
             // set up our heater control...
-            heaterControl = new HeaterControl( config );
+            heaterControl = new HeaterControl( config.heaterControl );
 
             // set up the temperature reader...
-            tempReader = new TempReader( config );
+            tempReader = new TempReader( config.tempReader );
 
             // start up our post office and our actors...
             establishCPO();
-
-            // start up our test orchestration...
-            orchestrator.schedule( config );
         }
 
         // if we get ANY exception during the app startup, we consider it to be fatal...
@@ -100,7 +93,7 @@ public class App {
     private void establishCPO() {
 
         // create our post office, which initiates the connection to the CPO...
-        po = new PostOffice( config );
+        po = new PostOffice( config.cpo );
 
         // wait a bit for the CPO to connect...
         long start = System.currentTimeMillis();

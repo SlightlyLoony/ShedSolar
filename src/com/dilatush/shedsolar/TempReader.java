@@ -3,14 +3,14 @@ package com.dilatush.shedsolar;
 import com.dilatush.shedsolar.events.AmbientTemperature;
 import com.dilatush.shedsolar.events.BatteryTemperature;
 import com.dilatush.shedsolar.events.HeaterTemperature;
-import com.dilatush.util.Config;
-import com.dilatush.util.noisefilter.Distance;
+import com.dilatush.util.AConfig;
+import com.dilatush.util.noisefilter.ErrorCalc;
 import com.dilatush.util.noisefilter.NoiseFilter;
 import com.dilatush.util.noisefilter.Sample;
-import com.dilatush.util.test.ATestInjector;
 import com.pi4j.io.spi.SpiChannel;
 import com.pi4j.io.spi.SpiDevice;
 import com.pi4j.io.spi.SpiFactory;
+import com.pi4j.io.spi.SpiMode;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -30,8 +30,8 @@ import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
  * the outliers.  This is not as easy as it sounds!</p>
  * <p>Further observation of the MX31855 outputs showed that both of our boards had roughly 2 second long periods of anomalously low readings at
  * regular intervals of about 10 seconds.  We have no explanation for this, and can find no online discussion of it anywhere.  If we had known this
- * prior to building {@link NoiseFilter}, we'd probably have done something simpler.  But no matter, as {@link NoiseFilter} seesm to handle the
- * issue just fine when configured with a {@link Distance} function that is much more heavily weighted for delta
+ * prior to building {@link NoiseFilter}, we'd probably have done something simpler.  But no matter, as {@link NoiseFilter} seems to handle the
+ * issue just fine when configured with a function that is much more heavily weighted for delta
  * temperature than for delta time.</p>
  * <p>While temperatures are actually read twice a second, they are only reported (by events) upon change.  During startup, readings are taken for
  * 10 seconds (20 readings) to determine the baseline.</p>
@@ -61,16 +61,10 @@ public class TempReader {
     // four bytes of data to write when reading temperature...
     private final byte[] writeData = new byte[] { (byte) 0, (byte) 0, (byte) 0, (byte) 0 };
 
-    private final TempReadTest batteryTest = new TempReadTest();
-    private final TempReadTest heaterTest = new TempReadTest();
-
     private final NoiseFilter batteryFilter;
     private final NoiseFilter heaterFilter;
 
-    private final long  sampleTreeDepthMS;
-    private final long  sampleTreeNoiseMS;
     private final long  errorEventIntervalMS;
-    private final float temperatureDistanceWeight;
 
     private Sample     lastBatteryReading = null;
     private Sample     lastHeaterReading  = null;
@@ -84,46 +78,57 @@ public class TempReader {
      * Creates a new instance of this class, configured according to the given configuration file.
      *
      * @param _config the configuration file
-     * @throws IOException on any problem configuring the SPI interface
      */
     public TempReader( final Config _config ) throws IOException {
 
         // get our configuration parameters...
-        long intervalMS               = _config.getLongDotted(  "tempReader.intervalMS"                );
-        sampleTreeDepthMS             = _config.getLongDotted(  "tempReader.sampleTreeDepthMS"         );
-        sampleTreeNoiseMS             = _config.getLongDotted(  "tempReader.sampleTreeNoiseMS"         );
-        errorEventIntervalMS          = _config.getLongDotted(  "tempReader.errorEventIntervalMS"      );
-        temperatureDistanceWeight     = _config.getFloatDotted( "tempReader.temperatureDistanceWeight" );
+        errorEventIntervalMS = _config.errorEventIntervalMS;
 
         // get our SPI devices...
-        batteryTempSPI = SpiFactory.getInstance( SpiChannel.CS0, SpiDevice.DEFAULT_SPI_SPEED, SpiDevice.DEFAULT_SPI_MODE );
-        heaterTempSPI = SpiFactory.getInstance( SpiChannel.CS1, SpiDevice.DEFAULT_SPI_SPEED, SpiDevice.DEFAULT_SPI_MODE );
+        batteryTempSPI = SpiFactory.getInstance( SpiChannel.CS0, SpiDevice.DEFAULT_SPI_SPEED, SpiMode.MODE_1 );
+        heaterTempSPI  = SpiFactory.getInstance( SpiChannel.CS1, SpiDevice.DEFAULT_SPI_SPEED, SpiMode.MODE_1 );
 
         // create our noise filters...
-        batteryFilter = new NoiseFilter( sampleTreeDepthMS, this::distance );
-        heaterFilter  = new NoiseFilter( sampleTreeDepthMS, this::distance );
-
-        // register our tests...
-        App.instance.orchestrator.registerTestInjector( batteryTest, "TempReader.readBattery" );
-        App.instance.orchestrator.registerTestInjector( heaterTest,  "TempReader.readHeater" );
+        batteryFilter = new NoiseFilter( _config.noiseFilter );
+        heaterFilter  = new NoiseFilter( _config.noiseFilter );
 
         // schedule our temperature reader...
-        schedule( new TempReaderTask(), 0, intervalMS, TimeUnit.MILLISECONDS );
+        schedule( new TempReaderTask(), 0, _config.intervalMS, TimeUnit.MILLISECONDS );
     }
 
 
     /**
-     * A simple distance implementation.  This implementation assumes that temperature values generally lie within an 80C range, and the square of
-     * the difference between the two sample's temperature has a 98% weight in the result.  The range of time differences is assumed to lie within
-     * a 40 second (40,000 millisecond) range, and the square of the difference of the timestamps, in milliseconds, has a 2% weight in the result.
-     * The two weighted computations are simply added to get the final distance.
+     * Validatable POJO for {@link TempReader} configuration (see {@link TempReader#TempReader(Config)}).
      */
-    private float distance( final Sample _newSample, final Sample _existingSample ) {
-        float dTemp            = _newSample.value - _existingSample.value;
-        float dTime            = _newSample.timestamp.toEpochMilli() - _existingSample.timestamp.toEpochMilli();
-        float measurementScore =       temperatureDistanceWeight  * (float) Math.pow( dTemp, 2 ) / 6400;
-        float timeScore        = (1f - temperatureDistanceWeight) * (float) Math.pow( dTime, 2 ) / 16000000;
-        return measurementScore + timeScore;
+    public static class Config extends AConfig {
+
+        /**
+         * The interval between temperature readings, in milliseconds.  Valid values are in the range [100..600,000] (0.1 second to 10 minutes).
+         */
+        public  long intervalMS = 250;
+
+        /**
+         * The interval between error events, in milliseconds.  Valid values are in the range [intervalMS..600,000].
+         */
+        public  long errorEventIntervalMS = 10000;
+
+        /**
+         * An instance of the class that implements {@link ErrorCalc}, for the noise filter.
+         */
+        public NoiseFilter.NoiseFilterConfig noiseFilter = new NoiseFilter.NoiseFilterConfig();
+
+
+        /**
+         * Verify the fields of this configuration.
+         */
+        @Override
+        protected void verify() {
+            validate( () -> ((intervalMS >= 100) && (intervalMS <= 1000 * 60 * 10)),
+                    "Temperature Reader interval out of range: " + intervalMS );
+            validate( () -> ((errorEventIntervalMS >= intervalMS) && (errorEventIntervalMS <= 1000 * 60 * 10)),
+                    "Temperature Reader error event interval is out of range: " + errorEventIntervalMS );
+            valid = valid && noiseFilter.isValid();
+        }
     }
 
 
@@ -139,7 +144,7 @@ public class TempReader {
 
                 /* handle the battery reading... */
                 // first get the raw reading...
-                int rawBattery = batteryTest.inject( getRaw( batteryTempSPI, "Battery" ) );
+                int rawBattery = getRaw( batteryTempSPI, "Battery" );
 
                 // if there's an error, handle it...
                 if( (rawBattery & FAULT_MASK) != 0 ) {
@@ -167,13 +172,10 @@ public class TempReader {
                     // add a sample to the filter...
                     float batteryTemp        = ((rawBattery & THERMOCOUPLE_MASK ) >> THERMOCOUPLE_OFFSET ) /  4.0f;
                     LOGGER.finest( "Battery temperature read: " + batteryTemp );
-                    batteryFilter.addSample( new Sample( batteryTemp, Instant.now() ) );
-
-                    // prune our filter...
-                    batteryFilter.prune( Instant.now() );
+                    batteryFilter.add( new Sample( batteryTemp, Instant.now() ) );
 
                     // get a temperature sample, if we can...
-                    Sample sample = batteryFilter.sampleAt( sampleTreeDepthMS * 3/4, sampleTreeNoiseMS, Instant.now() );
+                    Sample sample = batteryFilter.getFilteredAt( Instant.now() );
 
                     // if we got a sample, and it's different than our last sample, send an event...
                     if( (sample != null) && ((lastBatteryReading == null) || (sample.value != lastBatteryReading.value)) ) {
@@ -184,7 +186,7 @@ public class TempReader {
 
                 /* handle the heater reading... */
                 // first get the raw reading...
-                 int rawHeater  = heaterTest.inject(  getRaw( heaterTempSPI,  "Heater"  ) );
+                 int rawHeater  = getRaw( heaterTempSPI,  "Heater" );
 
                  // if there's an error, handle it...
                 if( (rawHeater & FAULT_MASK) != 0 ) {
@@ -212,13 +214,10 @@ public class TempReader {
                     // add a sample to the filter...
                     float heaterTemp        = ((rawHeater & THERMOCOUPLE_MASK ) >> THERMOCOUPLE_OFFSET ) /  4.0f;
                     LOGGER.finest( "Heater temperature read: " + heaterTemp );
-                    heaterFilter.addSample( new Sample( heaterTemp, Instant.now() ) );
-
-                    // prune our filter...
-                    heaterFilter.prune( Instant.now() );
+                    heaterFilter.add( new Sample( heaterTemp, Instant.now() ) );
 
                     // get a temperature reading, if we can...
-                    Sample reading = heaterFilter.sampleAt( sampleTreeDepthMS * 3/4, sampleTreeNoiseMS, Instant.now() );
+                    Sample reading = heaterFilter.getFilteredAt( Instant.now() );
 
                     // if we got a reading, and it's different than our last reading, send an event...
                     if( (reading != null) && ((lastHeaterReading == null) || (reading.value != lastHeaterReading.value)) ) {
@@ -295,24 +294,6 @@ public class TempReader {
         catch( IOException _e ) {
             LOGGER.log( Level.SEVERE, "Error when reading SPI device " + _name, _e );
             return IO_ERROR_MASK;
-        }
-    }
-
-
-    private static class TempReadTest extends ATestInjector<Integer> {
-
-        private int testPattern;
-
-        @Override
-        public void set( final Object _testPattern ) {
-            super.set( _testPattern );
-            testPattern = Integer.decode( (String) _testPattern );
-        }
-
-
-        @Override
-        public Integer inject( final Integer _int ) {
-            return enabled ? testPattern | _int : _int;
         }
     }
 }

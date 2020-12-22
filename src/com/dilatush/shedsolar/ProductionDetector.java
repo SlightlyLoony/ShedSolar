@@ -1,7 +1,7 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.shedsolar.events.*;
-import com.dilatush.util.Config;
+import com.dilatush.util.AConfig;
 import org.shredzone.commons.suncalc.SunTimes;
 
 import java.time.Instant;
@@ -17,6 +17,7 @@ import static com.dilatush.shedsolar.TemperatureMode.PRODUCTION;
 import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
 import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
 
+// TODO: enhance this to detect and handle cloudy days, snow-covered panels, etc.
 /**
  * Keeps track of transitions between periods of possible solar production and periods of solar system dormancy, using information about solar panel
  * output voltage, weather station pyrometer (solar power), and computed sunrise and sunset times.  Note that these transitions can occur because of
@@ -51,17 +52,17 @@ public class ProductionDetector {
     /**
      * Creates a new instance of this class.  Also subscribes to the events we need to do the job.
      *
-     * @param _config the app's configuration
+     * @param _config the product detector's {@link Config}.
      */
     public ProductionDetector( final Config _config ) {
 
-        lat                = _config.getDoubleDotted( "productionDetector.lat"                        );
-        lon                = _config.getDoubleDotted( "productionDetector.lon"                        );
-        pyrometerThreshold = _config.optFloatDotted(  "productionDetector.pyrometerThreshold",    80f );
-        panelThreshold     = _config.optFloatDotted(  "productionDetector.panelThreshold",       225f );
-        toProductionDelay  = _config.optIntDotted(    "productionDetector.toProductionDelay",      5  );
-        toDormantDelay     = _config.optIntDotted(    "productionDetector.toDormantDelay",        60  );
-        long interval      = _config.optLongDotted(   "productionDetector.intervalMS",         60000  );
+        lat                = _config.lat;
+        lon                = _config.lon;
+        pyrometerThreshold = _config.pyrometerThreshold;
+        panelThreshold     = _config.panelThreshold;
+        toProductionDelay  = _config.toProductionDelay;
+        toDormantDelay     = _config.toDormantDelay;
+        long interval      = _config.interval;
 
         minutesSinceChange = 0;
         lastMode           = PRODUCTION;    // we assume production mode on startup, just to be safe...
@@ -77,6 +78,76 @@ public class ProductionDetector {
 
         // schedule our detector...
         schedule( new Detector(), interval, interval, TimeUnit.MILLISECONDS );
+    }
+
+
+    public static class Config extends AConfig {
+
+        /**
+         * The latitude, in degrees, of the solar system's location.  This is used to calculate the sunrise and sunset times.  The value must be in
+         * the range [-90..90].  There is no default value.
+         */
+        public double lat;
+
+        /**
+         * The longitude, in degrees, of the solar system's location.  This is used to calculate the sunrise and sunset times.  The value must be in
+         * the range [-180..180].  There is no default value.
+         */
+        public double lon;
+
+        /**
+         * The pyrometer reading (in watts/square meter) threshold.  Values above the specified value indicate enough light for solar production.
+         * The value must be in the range [0..1200]; the default value is 80.
+         */
+        public float pyrometerThreshold = 80;
+
+        /**
+         * The solar panel voltage threshold.  Values above the specified value indicate enough light for solar production.  The value must be in
+         * the range [0..300]; the default value is 225.
+         */
+        public float panelThreshold = 225;
+
+        /**
+         * The interval (in milliseconds) that the production detector operates on; the "ticks" of its clock.  The value must be in the
+         * range [10,000..600,000]; the default value is 60,000 (one minute).
+         */
+        public long interval = 60000;
+
+        /**
+         * The delay before switching from dormant to production mode, when adequate brightness has been detected, in "ticks" (see interval).  The
+         * idea behind this delay is to avoid jumping to production mode if there's only a brief burst of light, like a hole in the clouds.  The
+         * value must be in the range [0..120]; the default value is 5.
+         */
+        public int toProductionDelay = 5;
+
+        /**
+         * The delay before switching from production to dormant mode, when inadequate brightness has been detected, in "ticks" (see interval).  The
+         * idea behind this delay is to avoid jumping to dormant mode if there's oly a brief interruption of light, like a cloud blocking the sun.
+         * The value must be in the range [0..240]; the default value is 60.
+         */
+        public int toDormantDelay = 60;
+
+
+        /**
+         * Verify the fields of this configuration.
+         */
+        @Override
+        protected void verify() {
+            validate( () -> ((lat >= -90) && (lat <= 90)),
+                    "Production Detector latitude out of range: " + lat );
+            validate( () -> ((lon >= -180) && (lon <= 180)),
+                    "Production Detector longitude out of range: " + lat );
+            validate( () -> ((pyrometerThreshold >= 0) && (pyrometerThreshold <= 1200)),
+                    "Production Detector pyrometer watts/square meter threshold is out of range: " + pyrometerThreshold );
+            validate( () -> ((panelThreshold >= 0) && (panelThreshold <= 300)),
+                    "Production Detector solar panel voltage threshold is out of range: " + panelThreshold );
+            validate( () -> ((interval >= 10000) && (interval <= 600000)),
+                    "Production Detector 'tick' interval (in milliseconds) is out of range: " + interval);
+            validate( () -> ((toProductionDelay >= 0) && (toProductionDelay <= 120)),
+                    "Production Detector to production delay (in 'ticks') is out of range: " + toProductionDelay );
+            validate( () -> ((toDormantDelay >= 0) && (toDormantDelay <= 240)),
+                    "Production Detector to dormant delay (in 'ticks') is out of range: " + toDormantDelay );
+        }
     }
 
 

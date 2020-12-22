@@ -2,10 +2,8 @@ package com.dilatush.shedsolar;
 
 import com.dilatush.shedsolar.events.OutbackFailure;
 import com.dilatush.shedsolar.events.OutbackReading;
-import com.dilatush.util.Config;
+import com.dilatush.util.AConfig;
 import com.dilatush.util.syncevents.SynchronousEvent;
-import com.dilatush.util.test.ATestInjector;
-import com.dilatush.util.test.TestInjector;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -22,6 +20,7 @@ import java.util.logging.Logger;
 
 import static com.dilatush.shedsolar.App.execute;
 import static com.dilatush.shedsolar.App.schedule;
+import static com.dilatush.util.Internet.isValidHost;
 import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
 
 /**
@@ -35,7 +34,6 @@ public class Outbacker {
 
     private final String host;
     private final URL url;
-    private final TestException testException;
 
 
     /**
@@ -46,16 +44,39 @@ public class Outbacker {
     public Outbacker( final Config _config ) {
 
         // set this thing up...
-        host = _config.getStringDotted( "outback.host" );
-        long interval = _config.optLongDotted( "outback.interval", 60000 );
-        url = getURL();
+        host          = _config.host;
+        long interval = _config.interval;
+        url           = getURL();
 
         // schedule the execution of the query...
         schedule( () -> execute( new OutbackerTask() ), 0, interval, TimeUnit.MILLISECONDS );
+    }
 
-        // set up our tests...
-        testException = new TestException();
-        App.instance.orchestrator.registerTestInjector( testException, "Outbacker.readError" );
+
+    public static class Config extends AConfig {
+
+        /**
+         * The host or dotted-form IP address for the Outback Mate3S supervisor on the charger/inverter.
+         */
+        public String host;
+
+        /**
+         * The interval between interrogations of the Outback Mate3S, in milliseconds.  This value must be greater than 30,000;
+         * it defaults to 60,000.
+         */
+        public long   interval = 60000;
+
+
+        /**
+         * Verify the fields of this configuration.
+         */
+        @Override
+        protected void verify() {
+            validate( () -> isValidHost( host ),
+                    "Outback Interrogator host not found: " + host );
+            validate( () -> interval > 30000,
+                    "Outback Interrogator interval is too short: " + interval );
+        }
     }
 
 
@@ -94,10 +115,6 @@ public class Outbacker {
                 if( conn.getResponseCode() != 200 ) {
                     throw new RuntimeException( "Failed : HTTP error code : " + conn.getResponseCode() );
                 }
-
-                // test injection...
-                if( testException.inject( null ) )
-                    throw new SocketTimeoutException( "Test" );
 
                 BufferedReader br = new BufferedReader( new InputStreamReader(
                         (conn.getInputStream()) ) );
@@ -138,15 +155,6 @@ public class Outbacker {
             } catch( RuntimeException _e ) {
                 LOGGER.log( Level.SEVERE, "Unhandled exception in OutbackerTask", _e );
             }
-        }
-    }
-
-
-    private static class TestException extends ATestInjector<Boolean> implements TestInjector<Boolean> {
-
-        @Override
-        public Boolean inject( final Boolean _o ) {
-            return enabled;
         }
     }
 }

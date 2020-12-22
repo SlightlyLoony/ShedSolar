@@ -1,11 +1,12 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.shedsolar.events.*;
-import com.dilatush.util.Config;
+import com.dilatush.util.AConfig;
 import com.pi4j.io.gpio.*;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -37,23 +38,27 @@ public class HeaterControl {
     private final GpioPinDigitalInput  ssrSense;
     private final GpioPinDigitalOutput heaterPowerLED;
     private final GpioPinDigitalOutput heaterSSR;
-    private final long                 maxHeaterOnVerifyMS;
-    private final long                 heaterCooldownMS;
+    private final long                 maxHeaterOnVerifyTime;
+    private final long                 maxHeaterOffVerifyTime;
+    private final long                 heaterCooldownTime;
+    private final int                  maxHeaterStartAttempts;
+    private final float                heaterTempChangeSenseThreshold;
+    private final float                batteryTempChangeSenseThreshold;
+    private final float                maxHeaterTemperature;
+    private final long                 maxOpenLoopHeaterRunTime;
 
+    // the following mutable variables are accessed both from the events thread and the scheduled thread...
     private volatile TemperatureMode  mode;
     private volatile float            heaterTemperature;
-    private volatile float            heaterTemperatureBefore;
     private volatile boolean          heaterTemperatureGood;
     private volatile float            batteryTemperature;
     private volatile boolean          batteryTemperatureGood;
     private volatile float            ambientTemperature;
     private volatile boolean          ambientTemperatureGood;
     private volatile TemperatureRange range;
-    private volatile boolean          cooldownRan;
 
-    // state machine state...
-    private volatile HeaterState     currentState;
-    private volatile HeaterState     nextState;
+    // our state machine...
+    private final HeaterStateMachine  stateMachine;
 
 
     /**
@@ -67,16 +72,17 @@ public class HeaterControl {
     public HeaterControl( final Config _config ) {
 
         // extract our configuration...
-        float dLo                  = _config.getFloatDotted( "heaterControl.dormantLowTemp"             );
-        float dHi                  = _config.getFloatDotted( "heaterControl.dormantHighTemp"            );
-        float pLo                  = _config.getFloatDotted( "heaterControl.productionLowTemp"          );
-        float pHi                  = _config.getFloatDotted( "heaterControl.productionHighTemp"         );
-        maxHeaterOnVerifyMS        = _config.getLongDotted(  "heaterControl.maxHeaterOnVerifyMS"        );
-        heaterCooldownMS           = _config.getLongDotted(  "heaterControl.heaterCooldownMS"           );
-
-        productionRange = new TemperatureRange( pLo, pHi );
-        dormantRange    = new TemperatureRange( dLo, dHi );
-        cooldownRan     = false;
+        productionRange                 = new TemperatureRange( _config.productionLowTemp, _config.productionHighTemp );
+        dormantRange                    = new TemperatureRange( _config.dormantLowTemp,    _config.dormantHighTemp    );
+        maxHeaterOnVerifyTime           = _config.maxHeaterOnVerifyTime;
+        maxHeaterOffVerifyTime          = _config.maxHeaterOffVerifyTime;
+        heaterCooldownTime              = _config.heaterCooldownTime;
+        maxHeaterStartAttempts          = _config.maxHeaterStartAttempts;
+        heaterTempChangeSenseThreshold  = _config.heaterTempChangeSenseThreshold;
+        batteryTempChangeSenseThreshold = _config.batteryTempChangeSenseThreshold;
+        maxHeaterTemperature            = _config.maxHeaterTemperature;
+        maxOpenLoopHeaterRunTime        = _config.maxOpenLoopHeaterRunTime;
+        long tickTime                   = _config.tickTime;
 
         // initialize the GPIO pins for the SSR, the SSR sense relay, and the heater on indicator LED...
         GpioController       controller     = App.instance.gpio;
@@ -86,8 +92,8 @@ public class HeaterControl {
         heaterPowerLED.setShutdownOptions( true, PinState.HIGH );
         heaterSSR.setShutdownOptions(      true, PinState.HIGH );
 
-        // we start out by assuming that we're in production mode with the heater off...
-        mode = PRODUCTION;
+        // we start out our state machine by assuming that we're in production mode with the heater off...
+        mode  = PRODUCTION;
         range = productionRange;
 
         // subscribe to the events we want to monitor...
@@ -96,14 +102,171 @@ public class HeaterControl {
         subscribeToEvent( event -> handleHeaterTemperatureEvent(   (HeaterTemperature)  event ),  HeaterTemperature.class   );
         subscribeToEvent( event -> handleAmbientTemperatureEvent(  (AmbientTemperature)  event ), AmbientTemperature.class  );
 
-        // set our initial state...
-        currentState = null;
-        nextState    = new Idle();
-
         // schedule our state machine tick...
-        schedule( new HeaterStateMachine(), 0, _config.getLongDotted( "heaterControl.tickMS" ), MILLISECONDS );
+        stateMachine = new HeaterStateMachine();
+        schedule( stateMachine, 0, tickTime, MILLISECONDS );
     }
 
+
+    public static class Config extends AConfig {
+
+        /**
+         * The lowest battery temperature (in degrees Celcius) allowed when in dormant mode.  This value must be in the range [-10..25], and it must
+         * be less than {@link #dormantHighTemp} and less than {@link #productionLowTemp}.  Its default value is 0C.
+         */
+        public float dormantLowTemp;
+
+        /**
+         * The highest battery temperature (in degrees Celcius) allowed when in dormant mode.  This value must be in the range [-10..25], and it must
+         * be greater than {@link #dormantLowTemp} and less than {@link #productionHighTemp}.  Its default value is 5C.
+         */
+        public float dormantHighTemp;
+
+        /**
+         * The lowest battery temperature (in degrees Celcius) allowed when in production mode.  This value must be in the range [0..40], and it must
+         * be less than {@link #productionHighTemp} and greater than {@link #dormantLowTemp}.  Its default value is 25C.
+         */
+        public float productionLowTemp;
+
+        /**
+         * The highest battery temperature (in degrees Celcius) allowed when in production mode.  This value must be in the range [0..40], and it must
+         * be greater than {@link #productionLowTemp} and greater than {@link #dormantHighTemp}.  It's default value is 30C.
+         */
+        public float productionHighTemp;
+
+        /**
+         * The heater thermocouple measures the temperature of the air blowing out of the heater.  When turning the heater on, the temperature is
+         * measured just before turning it on, and then the heater's operation is verified when the temperature increases by at least
+         * {@link #heaterTempChangeSenseThreshold} degrees C.  This value determines the maximum time (in milliseconds) to wait for that
+         * verification.  If the time is exceeded, the heater has failed to start.  Note that the heater failing to start isn't necessarily fatal,
+         * as it may simply be too hot and in need of a cooldown cycle.  This value must be in the range [0..600,000], and the default value is
+         * 150,000 (or two and a half minutes).
+         */
+        public long  maxHeaterOnVerifyTime;
+
+        /**
+         * The heater thermocouple measures the temperature of the air blowing out of the heater.  When turning the heater off, the temperature is
+         * measured just before turning it off, and then the heater's operation is verified when the temperature decreases by at least
+         * {@link #heaterTempChangeSenseThreshold} degrees C.  This value determines the maximum time (in milliseconds) to wait for that
+         * verification.  If the time is exceeded, the heater has failed to shut off.  This value must be in the range [0..600,000], and the default
+         * value is 180,000 (or three minutes).
+         */
+        public long  maxHeaterOffVerifyTime;
+
+        /**
+         * When the heater fails to turn on, a heater cooldown cycle is initiated for up to {@link #maxHeaterStartAttempts} times.  This value is
+         * multiplied by the retry attempt number to determine how long to wait (in milliseconds) for cooling down (with the heater off).  For
+         * example, if this value was set to 180,000 (for 3 minutes), then the cooldown period would be 3 minutes on the first heater start retry, 6
+         * minutes on the second retry, 9 minutes on the third retry, and so on.  This value must be in the range [60,000..600,000] milliseconds.
+         * The default value is 180,000.
+         */
+        public long  heaterCooldownTime;
+
+        /**
+         * This value determines how many times to attempt starting the heater before assuming it has actually failed.  The heater has an
+         * overtemperature "breaker" that can prevent it from starting if the internal temperature of the heater is too high.  To handle this, if
+         * we try and fail to start the heater, then we wait for a while (see {@link #heaterCooldownTime}) to let the heater cool down and try again.
+         * This value must be in the range [1..10], and its default value is 4.
+         */
+        public int   maxHeaterStartAttempts;
+
+        /**
+         * This value defines the amount of change in the temperature (in degrees Celcius) measured by the thermocouple in the heater's air output
+         * must be seen to verify that the heater has successfully turned on or off.  This value must be in the range [1..40] degrees Celcius, and
+         * its default value is 10 degrees Celcius.
+         */
+        public float heaterTempChangeSenseThreshold;
+
+        /**
+         * This value defines the amount of change in the temperature (in degrees Celcius) measured by the thermocouple under the batteries
+         * must be seen to verify that the batteries are being heated or cooled.  This value must be in the range [0.25..10] degrees Celcius, and
+         * its default value is 2.5 degrees Celcius.
+         */
+        public float batteryTempChangeSenseThreshold;
+
+        /**
+         * This value defines the maximum temperature (in degrees Celcius) allowed in the heater's air output.  If this temperature is exceeded, the
+         * heater will be shut down even if the batteries' temperature is too low.  This is a safety feature in case the heater's internal
+         * overtemperature "breaker" fails.  The heater will be restarted after a cooldown period.  This value must be in the range [30..75] degrees
+         * Celcius, and its default value is 50C.
+         */
+        public float maxHeaterTemperature;
+
+        /**
+         * If the battery temperature thermocouple fails, but we sense that the heater temperature is below the current low battery temperature
+         * threshold, then we assume that the batteries need to be heated and we turn the heater on.  However, because we can't sense the actual
+         * battery temperature we just run "open loop", leaving the heater on for a fixed amount of time.  This value determines that time, in
+         * milliseconds.  Its value must be in the range [60,000..600,000] milliseconds (one minute to ten minutes); the default value is 300,000
+         * milliseconds (five minutes).
+         */
+        public long  maxOpenLoopHeaterRunTime;
+
+        /**
+         * The time (in milliseconds) between "ticks" of the heater control state machine.  This value must be in the range [1,000..15,000]
+         * milliseconds, and the default value is 5,000 milliseconds (five seconds).
+         */
+        public long tickTime;
+
+
+        public Config() {
+            tickTime                        = 5000;    // 5 seconds...
+            maxHeaterOnVerifyTime           = 150000;  // 2.5 minutes...
+            maxHeaterOffVerifyTime          = 180000;  // 3 minutes...
+            heaterCooldownTime              = 180000;  // 3 minutes...
+            maxOpenLoopHeaterRunTime        = 300000;  // 5 minutes...
+            dormantLowTemp                  = 0;
+            dormantHighTemp                 = 5;
+            productionLowTemp               = 25;
+            productionHighTemp              = 30;
+            heaterTempChangeSenseThreshold  = 10.0f;
+            batteryTempChangeSenseThreshold = 2.5f;
+            maxHeaterTemperature            = 50;
+            maxHeaterStartAttempts          = 4;
+        }
+
+        /**
+         * Verify the fields of this configuration.
+         */
+        @Override
+        protected void verify() {
+            validate( () -> ((dormantLowTemp >= -10) && (dormantLowTemp <= 25)),
+                    "Heater Control dormant low temperature is out of range: " + dormantLowTemp );
+            validate( () -> dormantLowTemp < dormantHighTemp,
+                    "Heater Control dormant low temperature is not less than dormant high temperature: " + dormantLowTemp );
+            validate( () -> dormantLowTemp < productionLowTemp,
+                    "Heater Control dormant low temperature is not less than production low temperature: " + dormantLowTemp );
+            validate( () -> ((dormantHighTemp >= -10) && (dormantHighTemp <= 25)),
+                    "Heater Control dormant high temperature is out of range: " + dormantHighTemp );
+            validate( () -> dormantHighTemp < productionHighTemp,
+                    "Heater Control dormant high temperature is not less than production high temperature: " + dormantHighTemp );
+            validate( () -> ((productionLowTemp >= 0) && (productionLowTemp <= 40)),
+                    "Heater Control production low temperature is out of range: " + productionLowTemp );
+            validate( () -> productionLowTemp < productionHighTemp,
+                    "Heater Control production low temperature is not less than production high temperature: " + productionLowTemp );
+            validate( () -> ((productionHighTemp >= 0) && (productionHighTemp <= 40)),
+                    "Heater Control production high temperature is out of range: " + productionHighTemp );
+            validate( () -> ((maxHeaterOnVerifyTime >= 0) && (maxHeaterOnVerifyTime <= 600000)),
+                    "Heater Control max heater on verify type is out of range: " + maxHeaterOnVerifyTime);
+            validate( () -> ((maxHeaterOffVerifyTime >= 0) && (maxHeaterOffVerifyTime <= 600000)),
+                    "Heater Control max heater off verify type is out of range: " + maxHeaterOffVerifyTime);
+            validate( () -> ((heaterCooldownTime >= 60000) && (heaterCooldownTime <=600000)),
+                    "Heater Control heater cooldown time out of range: " + heaterCooldownTime );
+            validate( () -> ((maxHeaterStartAttempts >= 1) && (maxHeaterStartAttempts <= 10)),
+                    "Heater Control max heater start attempts is out of range: " + maxHeaterStartAttempts );
+            validate( () -> ((heaterTempChangeSenseThreshold >= 1) && (heaterTempChangeSenseThreshold <= 40)),
+                    "Heater Control heater temperature change sense threshold is out of range: " + heaterTempChangeSenseThreshold );
+            validate( () -> ((batteryTempChangeSenseThreshold >= 0.25f) && (batteryTempChangeSenseThreshold <= 10)),
+                    "Heater Control battery temperature change sense threshold is out of range: " + batteryTempChangeSenseThreshold );
+            validate( () -> ((maxOpenLoopHeaterRunTime >= 60000) && (maxOpenLoopHeaterRunTime <= 600000)),
+                    "Heater Control max open loop heater run time is out of range: " + maxOpenLoopHeaterRunTime );
+            validate( () -> ((tickTime >= 1000) && (tickTime <= 15000)),
+                    "Heater Control tick time is out of range: " + tickTime );
+        }
+    }
+
+    // TODO: make maxHeaterOffVerifyTime actually work (currently unused!?!?!)...
+    // TODO: make maxHeaterTemperature actually work (currently unused!)...
+    // TODO: sense heater failure during a heating cycle...
 
     /**
      * This is the heart of the state machine.  The {@link #run()} method is called at the tick interval, and the current state's
@@ -112,9 +275,23 @@ public class HeaterControl {
      */
     private class HeaterStateMachine implements Runnable {
 
+        private final AtomicInteger      turnOnAttempts;         // the number of attempts made to turn on the heater...
+        private volatile HeaterState     currentState;
+        private volatile HeaterState     nextState;
+
+
+        public HeaterStateMachine() {
+            turnOnAttempts = new AtomicInteger();
+            currentState   = null;
+            nextState      = new Idle();
+        }
+
+
         @Override
         public void run() {
             try {
+
+                // TODO: add safety checks (battery over/under temp)...
 
                 // if we have a current state, time to tick...
                 if( currentState != null ) nextState = currentState.onTick();
@@ -178,6 +355,13 @@ public class HeaterControl {
     private class Armed implements HeaterState {
 
         @Override
+        public void onEntry() {
+
+            // zero our heater start attempt counter...
+            stateMachine.turnOnAttempts.set( 0 );
+        }
+
+        @Override
         public HeaterState onTick() {
 
             // if we have good battery temperature, that's our first choice...
@@ -194,172 +378,156 @@ public class HeaterControl {
                 return (ambientTemperatureGood && (ambientTemperature < range.lo) && (heaterTemperature < range.lo)) ? new TurnHeaterOn() : null;
             }
 
-            // we get here only if both thermocouples are bad - a fatal situation... abort!  abort!  abort!
-            return new HeaterAbort();
+            // we get here only if both thermocouples are bad - all we can do is wait some more...
+            // the bad temperature data will already be known to the status code...
+            return null;
          }
     }
 
 
-    /**
-     * The {@link HeaterAbort} state means that we have a fatal condition that can only be fixed by human intervention.  The heater is turned off
-     * and we remain in this state unless a miracle occurs and one of our temperature sensors comes back to life.
-     */
-    private class HeaterAbort implements HeaterState {
-
-
-        @Override
-        public void onEntry() {
-            turnHeaterOff();
-        }
-
-
-        @Override
-        public HeaterState onTick() {
-
-            // if we have good temperature data from either thermocouple, we'll go to armed state.  Otherwise, we wait...
-            return ( heaterTemperatureGood || batteryTemperatureGood ) ? new Armed() : null;
-        }
-    }
-
 
     /**
-     * The {@link TurnHeaterOn} state means that we need to turn the heater on.
+     * The {@link TurnHeaterOn} state waits for the SSR sense relay to engage and for rising heater temperatures to be sensed.  If we get both of
+     * these within our time window, we'll exit normally - otherwise, things get more complicated.
      */
     private class TurnHeaterOn implements HeaterState {
 
-        @Override
-        public void onEntry() {
-            turnHeaterOn();
-        }
-
-
-        @Override
-        public HeaterState onTick() {
-            return new VerifyHeaterOn();
-        }
-    }
-
-
-    /**
-     * The {@link VerifyHeaterOn} state waits for the SSR sense relay to engage and for rising heater temperatures to be sensed.  If we get both of
-     * these within our time window, we'll exit normally - otherwise, things get more complicated.
-     */
-    private class VerifyHeaterOn implements HeaterState {
-
-        private static final float HEATER_INCREASE_SENSE_THRESHOLD = 10;
-        private static final float BATTERY_INCREASE_SENSE_THRESHOLD = 2;
-
-        private Instant started;               // the time we started verifying...
-        private Float   startingHeaterTemp;    // the starting heater temperature, or null if it was bad...
-        private Float   startingBatteryTemp;   // the starting battery temperature, or null if it was bad...
+        private Instant heaterStarted;               // the time we turned on the heater...
+        boolean startingHeaterTempGood;
+        float   startingHeaterTemp;
+        boolean startingBatteryTempGood;
+        float   startingBatteryTemp;
 
 
         @Override
         public void onEntry() {
-            started = Instant.now();
-            startingHeaterTemp = heaterTemperatureGood ? heaterTemperature : null;
-            startingBatteryTemp = batteryTemperatureGood ? batteryTemperature : null;
+
+            // some setup...
+            heaterStarted = Instant.now();
+            startingHeaterTempGood  = heaterTemperatureGood;
+            startingHeaterTemp      = heaterTemperature;
+            startingBatteryTempGood = batteryTemperatureGood;
+            startingBatteryTemp     = batteryTemperature;
+
+            // turn on the SSR controlling the heater...
+            heaterSSR.low();
+
+            // turn on the LED indicator...
+            heaterPowerLED.low();
+
+            // tell the rest of the world what we did...
+            publishEvent( new HeaterOn() );
         }
 
 
         @Override
         public HeaterState onTick() {
 
-            // if either sensed temperature was bad, fix it if it miraculously cured itself...
-            if( (startingHeaterTemp  == null) && heaterTemperatureGood  ) startingHeaterTemp  = heaterTemperature;
-            if( (startingBatteryTemp == null) && batteryTemperatureGood ) startingBatteryTemp = batteryTemperature;
-
-            // update our status...
-            boolean sensedSSR = ssrSense.isLow();                                                               // result is true if SSR sense relay sensed that the SSR is on...
-            Float currentHeaterTemp = heaterTemperatureGood ? heaterTemperature : null;                         // the current heater temperature, or null if it was bad...
-            Float currentBatteryTemp = batteryTemperatureGood ? batteryTemperature : null;                      // the current battery temperature, or null if it was bad...
-            boolean heaterTempIncreasing = (startingHeaterTemp != null) && (currentHeaterTemp != null)
-                    && (currentHeaterTemp - startingHeaterTemp > HEATER_INCREASE_SENSE_THRESHOLD);              // true if we've sensed the heater temperature increasing...
-            boolean batteryTempIncreasing = (startingBatteryTemp != null) && (currentBatteryTemp != null)
-                    && (currentBatteryTemp - startingBatteryTemp > BATTERY_INCREASE_SENSE_THRESHOLD);           // true if we've sensed the battery temperature increasing...
-            boolean waitOver = (Duration.between( started, Instant.now() ).toMillis() >= maxHeaterOnVerifyMS);  // true if we've run out of time to wait...
-
-            // safety first - if we sense the battery temperature going over range, we shut off the heater...
-            if( batteryTemperatureGood && (batteryTemperature > range.hi) )
-                return new TurnHeaterOff();
-
-            // if we see the heater temperature increasing, things are working well...
-            if( heaterTempIncreasing ) {
-
-                // if we're also sensing the SSR, then we move on to a normal run...
-                if( sensedSSR ) {
-                    LOGGER.finest( "Heater verification: SSR and increasing heater temperature both sensed" );
-                }
-
-                // if we don't sense the SSR working, then it looks like a SSR sense relay failure...
-                else {
-                    LOGGER.finest( "Heater verification: increasing heater temperature sensed, SSR not sensed" );
-                    publishEvent( new SSRSenseFailure() );
-                }
-
-                // in any case, move on to a normal run...
-                return new HeaterRun();
+            // if either sensed temperature was bad, fix it if it miraculously cured itself (we're optimists, what can we say?)...
+            if( !startingHeaterTempGood && heaterTemperatureGood  ) {
+                startingHeaterTemp = heaterTemperature;
+                startingHeaterTempGood = true;
+            }
+            if( !startingBatteryTempGood && batteryTemperatureGood ) {
+                startingBatteryTemp = batteryTemperature;
+                startingBatteryTempGood = true;
             }
 
-            // if our waiting period is not over, then we just wait some more...
-            if( !waitOver )
+            /*
+             * The following code is the (hopefully!) normal case, when we have good temperature data for the heater...
+             */
+            if( heaterTemperatureGood ) {
+
+                // if we see the temperature increase, then it's time to move right along...
+                if( heaterTemperature - startingHeaterTemp >= heaterTempChangeSenseThreshold ) {
+
+                    // squawk if the SSR sense relay isn't on, as it may be broken...
+                    checkSSRSenseOn();
+
+                    // then go on to a normal heater run...
+                    LOGGER.finest( "Heater verification: increasing heater temperature sensed" );
+                    return new HeaterRun( heaterStarted );
+                }
+            }
+
+            /*
+             * The following code is a degraded case, when we have good temperature for the battery, but not the heater...
+             */
+            else if( batteryTemperatureGood ) {
+
+                // if we see the temperature increase, then it's time to move right along...
+                if( batteryTemperature - startingBatteryTemp > batteryTempChangeSenseThreshold ) {
+
+                    // squawk if the SSR sense relay isn't on, as it may be broken...
+                    checkSSRSenseOn();
+
+                    // then go on to a normal heater run...
+                    LOGGER.finest( "Heater verification: increasing battery temperature sensed" );
+                    return new HeaterRun( heaterStarted );
+                }
+            }
+
+            /*
+             * The following code is a fatally degraded case, wherein we have no temperature data at all.  This can only happen if the sensors
+             * fail between the Armed event onTick() and this onTick() - possible, but not very likely...
+             */
+            else {
+
+                // the only safe thing to do now is to turn off the heater, scream bloody murder, and wait for good temperature data...
+                return new TurnHeaterOff( new Armed() );
+            }
+
+            /*
+             * We get here if we have NOT verified that the heater is working (by seeing increasing temperatures).
+             */
+
+            // if we've have more time to wait for verification, then we just leave...
+            if( Duration.between( heaterStarted, Instant.now() ).toMillis() <= maxHeaterOnVerifyTime ) {
                 return null;
-
-            // if we sense that the battery temperature has increased, then we'll assume a dual sensor failure and keep on keeping on...
-            if( batteryTempIncreasing ) {
-                publishEvent( new SSRSenseFailure() );
-                publishEvent( new HeaterTemperatureSenseFailure() );
-                LOGGER.finest( "Heater verification: SSR and increasing heater temperature both NOT sensed, but battery temperature IS increasing" );
-                return new HeaterRun();
             }
-
-            // we get here if we see neither heater nor battery temperatures increasing...
 
             // if we sense that the SSR is on then it looks like either the heater has failed outright, or its thermal interlock has tripped...
-            // in this case, we'll try a cooldown period (to reset the thermal interlock), if we haven't run one already...
-            if( sensedSSR ) {
-                if( !cooldownRan ) {
-                    LOGGER.finest( "Heater verification: SSR sensed, but neither heater nor battery temperatures are increasing; attempting cooldown" );
-                    return new Cooldown();
+            // if we've already tried the max number of times, then we abort as it looks like a heater failure...
+            if( ssrSense.isLow() ) {
+
+                // if we still have more attempts to make at a heater start, do it...
+                if( stateMachine.turnOnAttempts.get() < maxHeaterStartAttempts ) {
+                    LOGGER.finest( "Heater verification: SSR sensed, but no temperature increases; attempting restart after cooldown" );
+                    stateMachine.turnOnAttempts.incrementAndGet();  // keep track of our feeble attempts to start the heater...
+                    return new TurnHeaterOff( new TurnHeaterOn() );
                 }
 
-                // otherwise, it looks like our heater has failed...
+                // otherwise, it looks like our heater has failed, so we're just gonna abort...
                 else {
-                    LOGGER.finest( "Heater verification: SSR sensed, but neither heater nor battery temperatures are increasing; heater failure" );
+                    LOGGER.finest( "Heater verification: SSR sensed, but no temperature increases; possible heater failure" );
                     publishEvent( new HeaterFailure() );
-                    return new HeaterAbort();
+                    publishEvent( new HeaterControlAbort() );
+                    return new Abort();
                 }
             }
 
-            // otherwise we can't sense any heat increase and we can't sense the SSR is on - wo we probably have an SSR failure...
-            LOGGER.finest( "Heater verification: SSR not sensed, and neither heater nor battery temperatures are increasing" );
+            // otherwise if we're sensing that the SSR is off, it looks like we have an SSR failure, so all we can do is scream and abort...
+            LOGGER.finest( "Heater verification: SSR not sensed, and temperature increases; possible SSR failure" );
             publishEvent( new SSRStuckOff() );
-            return new HeaterAbort();
+            return new Abort();
+        }
+
+
+        private void checkSSRSenseOn() {
+            if( ssrSense.isHigh() ) {
+                LOGGER.finest( "Heater verification: SSR sense not on" );
+                publishEvent( new SSRSenseFailure( "stuck off" ) );
+            }
         }
     }
 
 
-    private class Cooldown implements HeaterState {
-
-        private Instant start;
-
-        @Override
-        public void onEntry() {
-            turnHeaterOff();
-            start = Instant.now();
-        }
-
+    private static class Abort implements HeaterState {
 
         @Override
         public HeaterState onTick() {
 
-            // if our cooldown period over, time to go back to armed...
-            if( Duration.between( start, Instant.now() ).toMillis() >= heaterCooldownMS ) {
-                cooldownRan = true;
-                return new Armed();
-            }
-
-            // otherwise, just leave...
+            // we just return null here, as we're not going to leave this state without human intervention...
             return null;
         }
     }
@@ -367,32 +535,104 @@ public class HeaterControl {
 
     private class HeaterRun implements HeaterState {
 
-        @Override
-        public void onEntry() {
+        private final Instant heaterStarted;  // when heater was turned on...
+
+
+        private HeaterRun( final Instant _heaterStarted ) {
+            heaterStarted = _heaterStarted;
         }
 
 
         @Override
         public HeaterState onTick() {
-            return null;
+
+            // if our battery temperature can be read, then it's our operative test...
+            if( batteryTemperatureGood ) {
+
+                // if the battery temperature is above the high range, its time to turn off the heater...
+                if( batteryTemperature > range.hi ) {
+                    LOGGER.finest( "Heater run: battery temperature exceeded high range" );
+                    return new TurnHeaterOff( new Armed() );
+                }
+
+                // otherwise, keep on trucking...
+                else
+                    return null;
+            }
+
+            // if we can't read the battery temperature, but we CAN read the heater temperature, then it's our operative test...
+            else if( heaterTemperatureGood ) {
+
+                // if the heater temperature exceeds our max, or if the heater run has exceeded our max, then it's time to turn off the heater...
+                if( heaterTemperature > maxHeaterTemperature ) {
+                    LOGGER.finest( "Heater run: heater temperature exceeded high range" );
+                    return new TurnHeaterOff( new Armed() );
+                }
+
+                // if the heater has run longer than our maximum run time, then it's time to turn off the heater...
+                if( Duration.between( heaterStarted, Instant.now() ).toMillis() > maxOpenLoopHeaterRunTime ) {
+                    LOGGER.finest( "Heater run: heater run time exceeded" );
+                    return new TurnHeaterOff( new Armed() );
+                }
+
+                // otherwise, keep on trucking...
+                else
+                    return null;
+
+            }
+
+            // if we get here, then our temperature sensing has died since we started the heater - time to abort...
+            return new TurnHeaterOff( new Abort() );
         }
     }
 
 
+    /**
+     * The {@link TurnHeaterOff} state turns off the heater, verifies that it's off, and waits for a cooldown period (to prevent the heater
+     * from trying to turn back on while it's still hot and the thermal interlock is tripped).
+     */
     private class TurnHeaterOff implements HeaterState {
 
+        private Instant heaterTurnedOff;
+        private final HeaterState afterHeaterOff;
+
+
+        public TurnHeaterOff( final HeaterState _afterHeaterOff ) {
+            afterHeaterOff = _afterHeaterOff;
+        }
+
+
         @Override
         public void onEntry() {
-            cooldownRan = false;  // if we get here, then the cooldown must have worked (if it ran)...
-            turnHeaterOff();
+
+            // mark our time...
+            heaterTurnedOff = Instant.now();
+
+            // turn off the SSR controlling the heater...
+            heaterSSR.high();
+
+            // turn off the LED indicator...
+            heaterPowerLED.high();
+
+            // tell the rest of the world what we did...
+            publishEvent( new HeaterOff() );
         }
 
 
         @Override
         public HeaterState onTick() {
+
+            // if our cooldown period is over, time to move on...
+            if( Duration.between( heaterTurnedOff, Instant.now() ).toMillis() >= heaterCooldownTime * stateMachine.turnOnAttempts.get() ) {
+                LOGGER.finest( "Turn heater off: cooldown period finished" );
+                return afterHeaterOff;
+            }
+
+            // otherwise, just leave...
             return null;
         }
     }
+
 
     /*
      * The following methods implement event handlers.
@@ -459,73 +699,5 @@ public class HeaterControl {
         LOGGER.finest( _event.toString() );
         ambientTemperature = _event.degreesC;
         ambientTemperatureGood = true;
-    }
-
-
-//    /**
-//     * Handle the results of a temperature event (battery OR heater).
-//     */
-//    private void handleHeater() {
-//
-//        // if we don't have any good temperature measurements, turn the heater off, scream, and leave...
-//        if( !batteryTemperatureGood && !heaterTemperatureGood ) {
-//            turnHeaterOff();
-//            publishEvent( new HeaterControlAbort() );
-//            return;
-//        }
-//
-//        // if the heater is already on, let's see if it's time to turn it off...
-//        if( heaterOn ) {
-//            float offTemp = (mode == PRODUCTION) ? productionHighTemp : dormantHighTemp;
-//            if( batteryTemperatureGood ? (batteryTemperature >= offTemp) : (heaterTemperature >= (offTemp + heaterTemperatureOffOffset)) ) {
-//                turnHeaterOff();
-//            }
-//        }
-//
-//        // if the heater is off, let's see if it's time to turn it on...
-//        else {
-//            float onTemp = (mode == PRODUCTION) ? productionLowTemp : dormantLowTemp;
-//            if( batteryTemperatureGood ? (batteryTemperature <= onTemp) : (heaterTemperature <= onTemp) ) {
-//                turnHeaterOn();
-//            }
-//        }
-//    }
-
-
-    /**
-     * Handles all the details of turning the heater on.
-     */
-    private void turnHeaterOn() {
-
-        // record the heater temperature before we turn it on...
-        heaterTemperatureBefore = heaterTemperature;
-
-        // turn on the SSR controlling the heater...
-        heaterSSR.low();
-
-        // turn on the LED indicator...
-        heaterPowerLED.low();
-
-        // tell the rest of the world what we did...
-        publishEvent( new HeaterOn() );
-    }
-
-
-    /**
-     * Handles all the details of turning the heater off.
-     */
-    private void turnHeaterOff() {
-
-        // record the heater temperature before we turn it off...
-        heaterTemperatureBefore = heaterTemperature;
-
-        // turn off the SSR controlling the heater...
-        heaterSSR.high();
-
-        // turn off the LED indicator...
-        heaterPowerLED.high();
-
-        // tell the rest of the world what we did...
-        publishEvent( new HeaterOff() );
     }
 }

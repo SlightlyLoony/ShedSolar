@@ -3,7 +3,10 @@
     <CLASSES>
       <root url="jar://$PROJECT_DIR$/../MOP/out/artifacts/MOP.jar!/" />
     </CLASSES>
-    <JAVADOC />
+    <JAVADOC>
+      <root url="file://$PROJECT_DIR$/../MOP/javadocs" />
+      <root url="file://$PROJECT_DIR$/../Util/docs" />
+    </JAVADOC>
     <SOURCES />
   </library>
 </component>
