@@ -3,6 +3,7 @@ package com.dilatush.shedsolar;
 import com.dilatush.mop.PostOffice;
 import com.dilatush.util.AConfig;
 
+import java.util.List;
 import java.util.logging.Logger;
 
 import static com.dilatush.util.Strings.isOneOf;
@@ -37,14 +38,14 @@ public class Config extends AConfig {
      * Verify the fields of this configuration.
      */
     @Override
-    protected void verify() {
-        validate( () -> isOneOf( mode, "normal", "tempTest", "assemblyTest"),
+    public void verify( final List<String> _messages ) {
+        validate( () -> isOneOf( mode, "normal", "tempTest", "assemblyTest"), _messages,
                 "ShedSolar mode is invalid: " + mode );
-        valid = valid && tempReader.isValid();
-        valid = valid && cpo.isValid();
-        valid = valid && batteryTempLED.isValid();
-        valid = valid && outbacker.isValid();
-        valid = valid && productionDetector.isValid();
-        valid = valid && heaterControl.isValid();
+        tempReader.verify( _messages );
+        cpo.verify( _messages );
+        batteryTempLED.verify( _messages );
+        outbacker.verify( _messages );
+        productionDetector.verify( _messages );
+        heaterControl.verify( _messages );
     }
 }

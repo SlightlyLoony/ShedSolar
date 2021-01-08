@@ -6,6 +6,7 @@ import org.shredzone.commons.suncalc.SunTimes;
 
 import java.time.Instant;
 import java.time.ZonedDateTime;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -18,6 +19,7 @@ import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
 import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
 
 // TODO: enhance this to detect and handle cloudy days, snow-covered panels, etc.
+// TODO: change to use panel power (In_V and In_I, multiplied) instead of threshold voltage...
 /**
  * Keeps track of transitions between periods of possible solar production and periods of solar system dormancy, using information about solar panel
  * output voltage, weather station pyrometer (solar power), and computed sunrise and sunset times.  Note that these transitions can occur because of
@@ -132,20 +134,20 @@ public class ProductionDetector {
          * Verify the fields of this configuration.
          */
         @Override
-        protected void verify() {
-            validate( () -> ((lat >= -90) && (lat <= 90)),
+        public void verify( final List<String> _messages ) {
+            validate( () -> ((lat >= -90) && (lat <= 90)), _messages,
                     "Production Detector latitude out of range: " + lat );
-            validate( () -> ((lon >= -180) && (lon <= 180)),
+            validate( () -> ((lon >= -180) && (lon <= 180)), _messages,
                     "Production Detector longitude out of range: " + lat );
-            validate( () -> ((pyrometerThreshold >= 0) && (pyrometerThreshold <= 1200)),
+            validate( () -> ((pyrometerThreshold >= 0) && (pyrometerThreshold <= 1200)), _messages,
                     "Production Detector pyrometer watts/square meter threshold is out of range: " + pyrometerThreshold );
-            validate( () -> ((panelThreshold >= 0) && (panelThreshold <= 300)),
+            validate( () -> ((panelThreshold >= 0) && (panelThreshold <= 300)), _messages,
                     "Production Detector solar panel voltage threshold is out of range: " + panelThreshold );
-            validate( () -> ((interval >= 10000) && (interval <= 600000)),
+            validate( () -> ((interval >= 10000) && (interval <= 600000)), _messages,
                     "Production Detector 'tick' interval (in milliseconds) is out of range: " + interval);
-            validate( () -> ((toProductionDelay >= 0) && (toProductionDelay <= 120)),
+            validate( () -> ((toProductionDelay >= 0) && (toProductionDelay <= 120)), _messages,
                     "Production Detector to production delay (in 'ticks') is out of range: " + toProductionDelay );
-            validate( () -> ((toDormantDelay >= 0) && (toDormantDelay <= 240)),
+            validate( () -> ((toDormantDelay >= 0) && (toDormantDelay <= 240)), _messages,
                     "Production Detector to dormant delay (in 'ticks') is out of range: " + toDormantDelay );
         }
     }

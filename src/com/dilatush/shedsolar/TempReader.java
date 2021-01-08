@@ -14,6 +14,7 @@ import com.pi4j.io.spi.SpiMode;
 
 import java.io.IOException;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -122,12 +123,12 @@ public class TempReader {
          * Verify the fields of this configuration.
          */
         @Override
-        protected void verify() {
-            validate( () -> ((intervalMS >= 100) && (intervalMS <= 1000 * 60 * 10)),
+        public void verify( final List<String> _messages ) {
+            validate( () -> ((intervalMS >= 100) && (intervalMS <= 1000 * 60 * 10)), _messages,
                     "Temperature Reader interval out of range: " + intervalMS );
-            validate( () -> ((errorEventIntervalMS >= intervalMS) && (errorEventIntervalMS <= 1000 * 60 * 10)),
+            validate( () -> ((errorEventIntervalMS >= intervalMS) && (errorEventIntervalMS <= 1000 * 60 * 10)), _messages,
                     "Temperature Reader error event interval is out of range: " + errorEventIntervalMS );
-            valid = valid && noiseFilter.isValid();
+            noiseFilter.verify( _messages );
         }
     }
 

@@ -6,6 +6,7 @@ import com.pi4j.io.gpio.*;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -228,38 +229,38 @@ public class HeaterControl {
          * Verify the fields of this configuration.
          */
         @Override
-        protected void verify() {
-            validate( () -> ((dormantLowTemp >= -10) && (dormantLowTemp <= 25)),
+        public void verify( final List<String> _messages ) {
+            validate( () -> ((dormantLowTemp >= -10) && (dormantLowTemp <= 25)), _messages,
                     "Heater Control dormant low temperature is out of range: " + dormantLowTemp );
-            validate( () -> dormantLowTemp < dormantHighTemp,
+            validate( () -> dormantLowTemp < dormantHighTemp, _messages,
                     "Heater Control dormant low temperature is not less than dormant high temperature: " + dormantLowTemp );
-            validate( () -> dormantLowTemp < productionLowTemp,
+            validate( () -> dormantLowTemp < productionLowTemp, _messages,
                     "Heater Control dormant low temperature is not less than production low temperature: " + dormantLowTemp );
-            validate( () -> ((dormantHighTemp >= -10) && (dormantHighTemp <= 25)),
+            validate( () -> ((dormantHighTemp >= -10) && (dormantHighTemp <= 25)), _messages,
                     "Heater Control dormant high temperature is out of range: " + dormantHighTemp );
-            validate( () -> dormantHighTemp < productionHighTemp,
+            validate( () -> dormantHighTemp < productionHighTemp, _messages,
                     "Heater Control dormant high temperature is not less than production high temperature: " + dormantHighTemp );
-            validate( () -> ((productionLowTemp >= 0) && (productionLowTemp <= 40)),
+            validate( () -> ((productionLowTemp >= 0) && (productionLowTemp <= 40)), _messages,
                     "Heater Control production low temperature is out of range: " + productionLowTemp );
-            validate( () -> productionLowTemp < productionHighTemp,
+            validate( () -> productionLowTemp < productionHighTemp, _messages,
                     "Heater Control production low temperature is not less than production high temperature: " + productionLowTemp );
-            validate( () -> ((productionHighTemp >= 0) && (productionHighTemp <= 40)),
+            validate( () -> ((productionHighTemp >= 0) && (productionHighTemp <= 40)), _messages,
                     "Heater Control production high temperature is out of range: " + productionHighTemp );
-            validate( () -> ((maxHeaterOnVerifyTime >= 0) && (maxHeaterOnVerifyTime <= 600000)),
+            validate( () -> ((maxHeaterOnVerifyTime >= 0) && (maxHeaterOnVerifyTime <= 600000)), _messages,
                     "Heater Control max heater on verify type is out of range: " + maxHeaterOnVerifyTime);
-            validate( () -> ((maxHeaterOffVerifyTime >= 0) && (maxHeaterOffVerifyTime <= 600000)),
+            validate( () -> ((maxHeaterOffVerifyTime >= 0) && (maxHeaterOffVerifyTime <= 600000)), _messages,
                     "Heater Control max heater off verify type is out of range: " + maxHeaterOffVerifyTime);
-            validate( () -> ((heaterCooldownTime >= 60000) && (heaterCooldownTime <=600000)),
+            validate( () -> ((heaterCooldownTime >= 60000) && (heaterCooldownTime <=600000)), _messages,
                     "Heater Control heater cooldown time out of range: " + heaterCooldownTime );
-            validate( () -> ((maxHeaterStartAttempts >= 1) && (maxHeaterStartAttempts <= 10)),
+            validate( () -> ((maxHeaterStartAttempts >= 1) && (maxHeaterStartAttempts <= 10)), _messages,
                     "Heater Control max heater start attempts is out of range: " + maxHeaterStartAttempts );
-            validate( () -> ((heaterTempChangeSenseThreshold >= 1) && (heaterTempChangeSenseThreshold <= 40)),
+            validate( () -> ((heaterTempChangeSenseThreshold >= 1) && (heaterTempChangeSenseThreshold <= 40)), _messages,
                     "Heater Control heater temperature change sense threshold is out of range: " + heaterTempChangeSenseThreshold );
-            validate( () -> ((batteryTempChangeSenseThreshold >= 0.25f) && (batteryTempChangeSenseThreshold <= 10)),
+            validate( () -> ((batteryTempChangeSenseThreshold >= 0.25f) && (batteryTempChangeSenseThreshold <= 10)), _messages,
                     "Heater Control battery temperature change sense threshold is out of range: " + batteryTempChangeSenseThreshold );
-            validate( () -> ((maxOpenLoopHeaterRunTime >= 60000) && (maxOpenLoopHeaterRunTime <= 600000)),
+            validate( () -> ((maxOpenLoopHeaterRunTime >= 60000) && (maxOpenLoopHeaterRunTime <= 600000)), _messages,
                     "Heater Control max open loop heater run time is out of range: " + maxOpenLoopHeaterRunTime );
-            validate( () -> ((tickTime >= 1000) && (tickTime <= 15000)),
+            validate( () -> ((tickTime >= 1000) && (tickTime <= 15000)), _messages,
                     "Heater Control tick time is out of range: " + tickTime );
         }
     }

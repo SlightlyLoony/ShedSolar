@@ -14,6 +14,7 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -71,10 +72,10 @@ public class Outbacker {
          * Verify the fields of this configuration.
          */
         @Override
-        protected void verify() {
-            validate( () -> isValidHost( host ),
+        public void verify( final List<String> _messages ) {
+            validate( () -> isValidHost( host ), _messages,
                     "Outback Interrogator host not found: " + host );
-            validate( () -> interval > 30000,
+            validate( () -> interval > 30000, _messages,
                     "Outback Interrogator interval is too short: " + interval );
         }
     }

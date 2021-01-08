@@ -6,6 +6,7 @@ import com.pi4j.io.gpio.GpioPinDigitalOutput;
 import com.pi4j.io.gpio.PinState;
 import com.pi4j.io.gpio.RaspiPin;
 
+import java.util.List;
 import java.util.logging.Logger;
 
 import static com.dilatush.shedsolar.App.schedule;
@@ -98,18 +99,18 @@ public class BatteryTempLED {
          * Verify the fields of this configuration.
          */
         @Override
-        protected void verify() {
-            validate( () -> minTemp < maxTemp,
+        public void verify( final List<String> _messages ) {
+            validate( () -> minTemp < maxTemp, _messages,
                     "Battery Temperature LED minimum temperature is not less than the maximum temperature: " + minTemp );
-            validate( () -> ((minTemp >= -5) && (minTemp <= 60)),
+            validate( () -> ((minTemp >= -5) && (minTemp <= 60)), _messages,
                     "Battery Temperature LED minimum temperature is out of range: " + minTemp );
-            validate( () -> ((maxTemp >= -5) && (maxTemp <= 60)),
+            validate( () -> ((maxTemp >= -5) && (maxTemp <= 60)), _messages,
                     "Battery Temperature LED maximum temperature is out of range: " + maxTemp );
-            validate( () -> ((normalInterval >= 500) && (normalInterval <= 5000)),
+            validate( () -> ((normalInterval >= 500) && (normalInterval <= 5000)), _messages,
                     "Battery Temperature LED normal interval is out of range: " + normalInterval );
-            validate( () -> ((errorInterval >= 250) && (errorInterval <= 2500)),
+            validate( () -> ((errorInterval >= 250) && (errorInterval <= 2500)), _messages,
                     "Battery Temperature LED error interval is out of range: " + errorInterval );
-            validate( () -> errorInterval * 2 <  normalInterval,
+            validate( () -> errorInterval * 2 <  normalInterval, _messages,
                     "Battery Temperature LED error interval more than half the normal interval: " + errorInterval );
         }
     }

@@ -1,6 +1,6 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.util.JSConfig;
+import com.dilatush.util.AConfig;
 import com.dilatush.util.syncevents.SynchronousEvents;
 
 import java.util.logging.Logger;
@@ -28,14 +28,16 @@ public class Main {
         LOGGER.info( "ShedSolar is starting..." );
 
         // get our configuration...
-        JSConfig<Config> jsConfigFactory = new JSConfig<>();
-        Config config = jsConfigFactory.get( "configuration.js", Config.class );
+        AConfig.InitResult ir = AConfig.init( Config.class, "configuration.js" );
 
         // if our configuration is not valid, just get out of here...
-        if( !config.isValid() ) {
+        if( !ir.valid ) {
             LOGGER.severe( "Aborting; configuration is invalid" );
             System.exit( 1 );
         }
+
+        // get our actual configuration...
+        Config config = (Config) ir.config;
 
         // start our events system...
         SynchronousEvents.getInstance();
