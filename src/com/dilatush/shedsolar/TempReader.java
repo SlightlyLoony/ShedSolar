@@ -7,6 +7,8 @@ import com.dilatush.util.AConfig;
 import com.dilatush.util.noisefilter.ErrorCalc;
 import com.dilatush.util.noisefilter.NoiseFilter;
 import com.dilatush.util.noisefilter.Sample;
+import com.dilatush.util.test.TestEnabler;
+import com.dilatush.util.test.TestManager;
 import com.pi4j.io.spi.SpiChannel;
 import com.pi4j.io.spi.SpiDevice;
 import com.pi4j.io.spi.SpiFactory;
@@ -74,6 +76,9 @@ public class TempReader {
     private Instant    lastBatteryErrorEvent = null;
     private Instant    lastHeaterErrorEvent  = null;
 
+    private final TestEnabler batteryRawTE;
+    private final TestEnabler heaterRawTE;
+
 
     /**
      * Creates a new instance of this class, configured according to the given configuration file.
@@ -92,6 +97,10 @@ public class TempReader {
         // create our noise filters...
         batteryFilter = new NoiseFilter( _config.noiseFilter );
         heaterFilter  = new NoiseFilter( _config.noiseFilter );
+
+        // create our test enablers...
+        batteryRawTE = TestManager.getInstance().register( "batteryRaw" );
+        heaterRawTE  = TestManager.getInstance().register( "heaterRaw"  );
 
         // schedule our temperature reader...
         schedule( new TempReaderTask(), 0, _config.intervalMS, TimeUnit.MILLISECONDS );
@@ -147,6 +156,10 @@ public class TempReader {
                 // first get the raw reading...
                 int rawBattery = getRaw( batteryTempSPI, "Battery" );
 
+                // modify if testing is enabled...
+                if( batteryRawTE.isEnabled() )
+                    rawBattery |= batteryRawTE.getAsInt( "mask" );
+
                 // if there's an error, handle it...
                 if( (rawBattery & FAULT_MASK) != 0 ) {
 
@@ -188,6 +201,10 @@ public class TempReader {
                 /* handle the heater reading... */
                 // first get the raw reading...
                  int rawHeater  = getRaw( heaterTempSPI,  "Heater" );
+
+                // modify if testing is enabled...
+                if( heaterRawTE.isEnabled() )
+                    rawHeater |= heaterRawTE.getAsInt( "mask" );
 
                  // if there's an error, handle it...
                 if( (rawHeater & FAULT_MASK) != 0 ) {

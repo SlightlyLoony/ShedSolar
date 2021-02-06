@@ -2,6 +2,8 @@ package com.dilatush.shedsolar;
 
 import com.dilatush.mop.PostOffice;
 import com.dilatush.util.AConfig;
+import com.dilatush.util.console.ConsoleServer;
+import com.dilatush.util.test.TestManager;
 
 import java.util.List;
 import java.util.logging.Logger;
@@ -32,6 +34,8 @@ public class Config extends AConfig {
     public Outbacker.Config            outbacker          = new Outbacker.Config();
     public ProductionDetector.Config   productionDetector = new ProductionDetector.Config();
     public HeaterControl.Config        heaterControl      = new HeaterControl.Config();
+    public TestManager.Config          testManager        = new TestManager.Config();
+    public ConsoleServer.Config        consoleServer      = new ConsoleServer.Config();
 
 
     /**
@@ -39,13 +43,17 @@ public class Config extends AConfig {
      */
     @Override
     public void verify( final List<String> _messages ) {
+
         validate( () -> isOneOf( mode, "normal", "tempTest", "assemblyTest"), _messages,
                 "ShedSolar mode is invalid: " + mode );
-        tempReader.verify( _messages );
-        cpo.verify( _messages );
-        batteryTempLED.verify( _messages );
-        outbacker.verify( _messages );
-        productionDetector.verify( _messages );
-        heaterControl.verify( _messages );
+
+        tempReader         .verify( _messages );
+        cpo                .verify( _messages );
+        batteryTempLED     .verify( _messages );
+        outbacker          .verify( _messages );
+        productionDetector .verify( _messages );
+        heaterControl      .verify( _messages );
+        testManager        .verify( _messages );
+        consoleServer      .verify( _messages );
     }
 }

@@ -1,28 +1,88 @@
 /*
  * ShedSolar configuration.
  */
+
+// load our secret keys from a secure location...
+load( "/apps/shedsolar/key.js" );     // the console server shared secret...
+load( "/apps/shedsolar/secret.js" );  // the CPO shared secret...
+
+
+/*
+ * Helper constructors and functions for test framework.
+ */
+
+// create constructor functions for some useful classes...
+var HashMap     = Java.type( "java.util.HashMap" );
+var ArrayList   = Java.type( "java.util.ArrayList" );
+var InetAddress = Java.type( "java.net.InetAddress" );
+
+// returns a HashMap with the properties of the given JavaScript object
+function makeMap( obj ) {
+    var map = new HashMap();
+    for( prop in obj ) {
+        if( obj.hasOwnProperty( prop ) )
+            map.put( prop, obj[prop] );
+    }
+    return map;
+}
+
+// returns an ArrayList with the values of the given JavaScript array
+function makeList( array ) {
+    var list = new ArrayList();
+    array.forEach( function( item ) {list.add( item ); });
+    return list;
+}
+
+
+// returns a Java TestEnabler of the given name, with the properties in the given JavaScript object
+function makeEnabler( name, properties ) {
+
+    // if name contains a period, assume it's a fully qualified type name; otherwise assume it's "com.dilatush.util.test.???TestEnabler",
+    // where "???" is this name...
+    var typeName = (name.indexOf( "." ) >= 0 )? name : "com.dilatush.util.test." + name + "TestEnabler";
+
+    var props = makeMap( properties );
+
+    return new (Java.type( typeName ) )( props );
+}
+
+
+// returns a Java CompositeTestEnabler with the properties in the given JavaScript object, and containing the Java test enablers in the given
+// JavaScript array
+function makeComposite( properties, enablers ) {
+    var props = makeMap( properties );
+    var enablerList = makeList( enablers );
+    return new (Java.type( "com.dilatush.util.test.CompositeTestEnabler" ))( props, enablerList );
+}
+
+
+function makeJavaScript( properties, script ) {
+    var props = makeMap( properties );
+    return new (Java.type( "com.dilatush.util.test.JavaScriptTestEnabler" ) )( props, script );
+}
+
+
+/*
+ * Our actual configuration initialization function.
+ */
 function init( config ) {
 
     // The mode to run ShedSolar in; the default is "normal".  There are three possibilities:
     //          "normal": the mode for normal operation
     //    "assemblyTest": mode that does a simple test of all the hardware components
     //        "tempTest": mode that runs a simple test of temperature measurement
-        config.mode = "tempTest";
+        config.mode = "normal";
 
 
     /*
      * CPO (Central Post Office) configuration.
      */
 
-    // The host name (or IP address) of the CPO.
-    config.cpo.host = "cpo.dilatush.com";
-
     // The name of this post office, which must be a string with one or more characters, unique amongst all post offices connected to the specified CPO.
     config.cpo.name = "shedsolar";
 
     // The secret that encrypts messages from this post office.  This is a string that must exactly match the one for this post office that has been
     // configured at the specified CPO.
-    load( "secret.js" );
     config.cpo.secret = secret;
 
     // The number of received messages that may be queued up before processing, in each mailbox on this post office.  This defaults to 100 if not
@@ -205,4 +265,51 @@ function init( config ) {
     // we try and fail to start the heater, then we wait for a while (see heaterCooldownTime) to let the heater cool down and try again.
     // This value must be in the range [1..10], and its default value is 4.
     config.heaterControl.maxHeaterStartAttempts = 4;
+
+
+    /*
+     * Console server configuration...
+     */
+
+    // The maximum number of console clients that may connect simultaneously.  Defaults to 1.
+    config.consoleServer.maxClients = 1;
+
+    // The name of this console server.
+    config.consoleServer.name = "shedsolar";
+
+    // The base64-encoded shared secret for this console server.  It must be a 16 byte (128 bit) value.
+    config.consoleServer.key = secretKey;
+
+    // The TCP port to listen for client connections on.
+    config.consoleServer.port = 8217;
+
+    // The IP address of the network interface to listen on (i.e., to bind to).  If {@code null} (the default), listens on all network interfaces.
+    config.consoleServer.bindTo = null;
+
+    // Add the providers to the providers map.  The key is the provider's name; the value is the fully qualified class name of the provider.
+    // Any number of providers may be included as long as their names are unique.  The same provider may be provisioned under multiple names.
+    config.consoleServer.providers.put( "test", "com.dilatush.util.test.TestConsoleProvider" );
+
+
+
+    /*
+     * Test scenario configuration...
+     */
+
+    // Set to true to enable the testing framework, false otherwise.  Defaults to false.
+    config.testManager.enabled = false;
+
+
+    // Sets the name of the default test scenario, which should of course be configured in the scenarios below.  Defaults to none.
+    config.testManager.scenario = "";
+
+
+    // A map of test scenarios.  Each scenario is itself a map of test enabler names (which must match the names registered by test code) to test
+    // enabler instances.
+    config.testManager.scenarios = makeMap( {
+        simple: {
+            batteryRaw: makeEnabler( "Manual", { "enabled": false, "mask": 0x00000001 } ),
+            heaterRaw:  makeEnabler( "Manual", { "enabled": false, "mask": 0x00000004 } )
+        }
+    } );
 }

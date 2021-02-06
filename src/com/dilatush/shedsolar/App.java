@@ -1,12 +1,16 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.mop.PostOffice;
+import com.dilatush.util.console.ConsoleServer;
+import com.dilatush.util.test.TestManager;
 import com.pi4j.io.gpio.GpioController;
 import com.pi4j.io.gpio.GpioFactory;
 
 import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static java.lang.Thread.sleep;
 
 /**
  * The ShedSolar application.  A single instance of this class is constructed and run when the shed solar system is started up.
@@ -34,6 +38,7 @@ public class App {
     public ProductionDetector productionDetector;
     public HeaterControl      heaterControl;
     public TempReader         tempReader;
+    public ConsoleServer      consoleServer;
 
     private App( final Config _config ) {
 
@@ -56,9 +61,16 @@ public class App {
         config = _config;
     }
 
+
     public void run() {
 
         try {
+
+            // initialize our test manager...
+            TestManager.configure( config.testManager );
+
+            // start up our console server...
+            consoleServer = new ConsoleServer( config.consoleServer );
 
             // get a GPIO controller...
             gpio = GpioFactory.getInstance();
@@ -90,6 +102,7 @@ public class App {
     }
 
 
+    @SuppressWarnings("BusyWait")
     private void establishCPO() {
 
         // create our post office, which initiates the connection to the CPO...
@@ -98,6 +111,14 @@ public class App {
         // wait a bit for the CPO to connect...
         long start = System.currentTimeMillis();
         while( (System.currentTimeMillis() - start) < MAX_CPO_WAIT ) {
+
+            // let some other things run...
+            try {
+                sleep( 100 );
+            }
+            catch( InterruptedException _e ) {
+                // nothing to do here...
+            }
 
             // have we connected to the CPO yet?
             if( po.isConnected() ) {
