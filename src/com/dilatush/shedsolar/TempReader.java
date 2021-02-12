@@ -1,9 +1,10 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.shedsolar.events.AmbientTemperature;
-import com.dilatush.shedsolar.events.BatteryTemperature;
-import com.dilatush.shedsolar.events.HeaterTemperature;
 import com.dilatush.util.AConfig;
+import com.dilatush.util.info.Info;
+import com.dilatush.util.info.InfoBox;
+import com.dilatush.util.info.InfoView;
+import com.dilatush.util.info.InfoViewer;
 import com.dilatush.util.noisefilter.ErrorCalc;
 import com.dilatush.util.noisefilter.NoiseFilter;
 import com.dilatush.util.noisefilter.Sample;
@@ -15,14 +16,14 @@ import com.pi4j.io.spi.SpiFactory;
 import com.pi4j.io.spi.SpiMode;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ScheduledFuture;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static com.dilatush.shedsolar.App.schedule;
-import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
+import static com.dilatush.shedsolar.Events.*;
 
 /**
  * <p>Implements a temperature reader for two MAX31855 type K thermocouple interface chips, one for battery temperature and the other for
@@ -45,6 +46,20 @@ public class TempReader {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
+    // the information this class publishes...
+    public final InfoViewer<TempSensorStatus>     batteryTemperatureSensorStatus;
+    public final InfoViewer<Float>                batteryTemperature;
+    public final InfoViewer<TempSensorStatus>     heaterTemperatureSensorStatus;
+    public final InfoViewer<Float>                heaterTemperature;
+    public final InfoViewer<Float>                ambientTemperature;
+
+    // the infoboxes for the published information...
+    private final InfoBox<TempSensorStatus>        batteryTemperatureSensorStatusBox;
+    private final InfoBox<Float>                   batteryTemperatureBox;
+    private final InfoBox<TempSensorStatus>        heaterTemperatureSensorStatusBox;
+    private final InfoBox<Float>                   heaterTemperatureBox;
+    private final InfoBox<Float>                   ambientTemperatureBox;
+
     // These values are derived from the MAX31855 specification...
     private final static int THERMOCOUPLE_MASK    = 0xFFFC0000;
     private final static int THERMOCOUPLE_OFFSET  = 18;
@@ -55,6 +70,9 @@ public class TempReader {
     private final static int SHORT_TO_GND_MASK    = 0x00000002;
     private final static int OPEN_MASK            = 0x00000001;
     private final static int FAULT_MASK           = IO_ERROR_MASK | SHORT_TO_GND_MASK | SHORT_TO_VCC_MASK + OPEN_MASK;
+
+    // our ShedSolar instance...
+    private final ShedSolar shedSolar = ShedSolar.instance;
 
 
     // the Pi4J SPI device instances for each of our sensors...
@@ -67,17 +85,15 @@ public class TempReader {
     private final NoiseFilter batteryFilter;
     private final NoiseFilter heaterFilter;
 
-    private final long  errorEventIntervalMS;
-
-    private Sample     lastBatteryReading = null;
-    private Sample     lastHeaterReading  = null;
-    private Sample     lastAmbientReading = null;
-
-    private Instant    lastBatteryErrorEvent = null;
-    private Instant    lastHeaterErrorEvent  = null;
-
+    // our test enabler...
     private final TestEnabler batteryRawTE;
     private final TestEnabler heaterRawTE;
+
+    // schedule canceller...
+    private ScheduledFuture<?> canceller;
+
+    // our configuration...
+    private final Config config;
 
 
     /**
@@ -87,195 +103,147 @@ public class TempReader {
      */
     public TempReader( final Config _config ) throws IOException {
 
-        // get our configuration parameters...
-        errorEventIntervalMS = _config.errorEventIntervalMS;
+        config = _config;
+
+        // set up our information publishing...
+        batteryTemperatureSensorStatusBox = new InfoBox<>();
+        batteryTemperatureSensorStatus = new InfoView<>( batteryTemperatureSensorStatusBox );
+        batteryTemperatureSensorStatusBox.set( new Info<>( new TempSensorStatus( false, false, false, false, false ) ) );
+        batteryTemperatureBox = new InfoBox<>();
+        batteryTemperature = new InfoView<>( batteryTemperatureBox );
+        
+        heaterTemperatureSensorStatusBox = new InfoBox<>();
+        heaterTemperatureSensorStatus = new InfoView<>( heaterTemperatureSensorStatusBox );
+        heaterTemperatureSensorStatusBox.set( new Info<>( new TempSensorStatus( false, false, false, false, false ) ) );
+        heaterTemperatureBox = new InfoBox<>();
+        heaterTemperature = new InfoView<>( heaterTemperatureBox );
+        
+        ambientTemperatureBox = new InfoBox<>();
+        ambientTemperature = new InfoView<>( ambientTemperatureBox );
 
         // get our SPI devices...
         batteryTempSPI = SpiFactory.getInstance( SpiChannel.CS0, SpiDevice.DEFAULT_SPI_SPEED, SpiMode.MODE_1 );
         heaterTempSPI  = SpiFactory.getInstance( SpiChannel.CS1, SpiDevice.DEFAULT_SPI_SPEED, SpiMode.MODE_1 );
 
         // create our noise filters...
-        batteryFilter = new NoiseFilter( _config.noiseFilter );
-        heaterFilter  = new NoiseFilter( _config.noiseFilter );
+        batteryFilter = new NoiseFilter( config.noiseFilter );
+        heaterFilter  = new NoiseFilter( config.noiseFilter );
 
         // create our test enablers...
         batteryRawTE = TestManager.getInstance().register( "batteryRaw" );
         heaterRawTE  = TestManager.getInstance().register( "heaterRaw"  );
 
         // schedule our temperature reader...
-        schedule( new TempReaderTask(), 0, _config.intervalMS, TimeUnit.MILLISECONDS );
+        canceller = ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate( this::tempTask, Duration.ZERO, config.startupInterval );
     }
 
 
     /**
-     * Validatable POJO for {@link TempReader} configuration (see {@link TempReader#TempReader(Config)}).
+     * Runs periodically to measure our temperatures...
      */
-    public static class Config extends AConfig {
+    private void tempTask() {
 
-        /**
-         * The interval between temperature readings, in milliseconds.  Valid values are in the range [100..600,000] (0.1 second to 10 minutes).
-         */
-        public  long intervalMS = 250;
+        try {
 
-        /**
-         * The interval between error events, in milliseconds.  Valid values are in the range [intervalMS..600,000].
-         */
-        public  long errorEventIntervalMS = 10000;
+            // handle the battery reading
+            int rawBattery = readThermocoupleTemperature(
+                    "Battery", batteryTempSPI, batteryTemperatureSensorStatusBox, batteryTemperatureBox,
+                    BATTERY_TEMPERATURE_SENSOR_UP, BATTERY_TEMPERATURE_SENSOR_DOWN, batteryFilter, batteryRawTE );
 
-        /**
-         * An instance of the class that implements {@link ErrorCalc}, for the noise filter.
-         */
-        public NoiseFilter.NoiseFilterConfig noiseFilter = new NoiseFilter.NoiseFilterConfig();
+            // handle the heater reading
+            int rawHeater = readThermocoupleTemperature(
+                    "Heater", heaterTempSPI, heaterTemperatureSensorStatusBox, heaterTemperatureBox,
+                    HEATER_TEMPERATURE_SENSOR_UP, HEATER_TEMPERATURE_SENSOR_DOWN, heaterFilter, heaterRawTE );
 
+            /*
+             * Now handle the ambient temperature.  Both chips supply it; we use the battery temperature chip if it's got a good reading,
+             * the heater temperature chip otherwise.  If neither is available, we simply don't report ambient temperature.
+             */
+            if( batteryTemperatureBox.get().isAvailable() )
+                ambientTemperatureBox.set( new Info<>( ((rawBattery & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f ) );
+            else if( heaterTemperatureBox.get().isAvailable() )
+                ambientTemperatureBox.set( new Info<>( ((rawHeater  & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f ) );
+            else
+                ambientTemperatureBox.set( new Info<>( null ) );
 
-        /**
-         * Verify the fields of this configuration.
-         */
-        @Override
-        public void verify( final List<String> _messages ) {
-            validate( () -> ((intervalMS >= 100) && (intervalMS <= 1000 * 60 * 10)), _messages,
-                    "Temperature Reader interval out of range: " + intervalMS );
-            validate( () -> ((errorEventIntervalMS >= intervalMS) && (errorEventIntervalMS <= 1000 * 60 * 10)), _messages,
-                    "Temperature Reader error event interval is out of range: " + errorEventIntervalMS );
-            noiseFilter.verify( _messages );
+            // switch the interval to the normal interval if we've started to get data...
+            if( batteryTemperatureBox.get().isAvailable() && heaterTemperatureBox.get().isAvailable() && (canceller != null) ) {
+                canceller.cancel( false );
+                canceller = null;
+                ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate( this::tempTask, Duration.ZERO, config.normalInterval );
+            }
+        }
+
+        // by definition, any exception caught here is, well, exceptional!
+        catch( Exception _e ) {
+            LOGGER.log( Level.SEVERE, "Unhandled exception when reading temperature", _e );
         }
     }
 
 
     /**
-     * The {@link Runnable} that does all the work of this class.
+     * Reads the temperature from a thermocouple, returning the raw value read from the sensor.
+     *
+     * @param _name The name of the thermocouple being measured.
+     * @param _device The SPI bus device being used to make the measurement.
+     * @param _statusBox The InfoBox containing the sensor status.
+     * @param _tempBox The InfoBox containing the temperature measurement.
+     * @param _up The Hap to send if the sensor goes from down to up.
+     * @param _down The Hap to send if the sensor goes from up to down.
+     * @param _filter The NoiseFilter for this sensor.
+     * @param _testEnabler The test enabler for this sensor.
+     * @return The raw value from the sensor.
      */
-    private class TempReaderTask implements Runnable {
+    private int readThermocoupleTemperature( final String _name, final SpiDevice _device, final InfoBox<TempSensorStatus> _statusBox,
+                                             final InfoBox<Float> _tempBox, final Events _up, final Events _down, final NoiseFilter _filter,
+                                             final TestEnabler _testEnabler ) {
 
-        @Override
-        public void run() {
+        // first get the raw reading...
+        int rawTemp = getRaw( _device, _name );
 
-            try {
+        // modify if testing is enabled...
+        if( _testEnabler.isEnabled() )
+            rawTemp |= _testEnabler.getAsInt( "mask" );
 
-                /* handle the battery reading... */
-                // first get the raw reading...
-                int rawBattery = getRaw( batteryTempSPI, "Battery" );
+        // get the previous status...
+        TempSensorStatus oldStatus = _statusBox.get().info;
 
-                // modify if testing is enabled...
-                if( batteryRawTE.isEnabled() )
-                    rawBattery |= batteryRawTE.getAsInt( "mask" );
+        // get the current status...
+        TempSensorStatus newStatus = new TempSensorStatus(
+                (rawTemp & FAULT_MASK) != 0,
+                (rawTemp & IO_ERROR_MASK    ) != 0,
+                (rawTemp & OPEN_MASK        ) != 0,
+                (rawTemp & SHORT_TO_VCC_MASK) != 0,
+                (rawTemp & SHORT_TO_GND_MASK) != 0
+        );
 
-                // if there's an error, handle it...
-                if( (rawBattery & FAULT_MASK) != 0 ) {
+        // if we've changed from problem to no problem, or vice versa, let the world know...
+        if( oldStatus.sensorProblem ^ newStatus.sensorProblem )
+            shedSolar.haps.post( newStatus.sensorProblem ? _down : _up );
 
-                    // see if we need to send an event...
-                    if( (lastBatteryErrorEvent == null) || (Instant.now().isAfter( lastBatteryErrorEvent.plusMillis( errorEventIntervalMS ))) ) {
+        // if our status has changed, update the published info...
+        if( newStatus.changed( oldStatus ) )
+            _statusBox.set( new Info<>( newStatus ) );
 
-                        // get our flags...
-                        boolean ioerror         = ((rawBattery & IO_ERROR_MASK    ) != 0);
-                        boolean open            = ((rawBattery & OPEN_MASK        ) != 0);
-                        boolean shortToVCC      = ((rawBattery & SHORT_TO_VCC_MASK) != 0);
-                        boolean shortToGnd      = ((rawBattery & SHORT_TO_GND_MASK) != 0);
+        // if the sensor is working, get our data...
+        if( !newStatus.sensorProblem ) {
 
-                        // publish the event...
-                        publishEvent( new BatteryTemperature( -1000, false, ioerror, open, shortToGnd, shortToVCC ) );
+            // add a sample to the filter...
+            float temp = ((rawTemp & THERMOCOUPLE_MASK ) >> THERMOCOUPLE_OFFSET ) /  4.0f;
+            LOGGER.finest( _name + " temperature read: " + temp );
+            _filter.add( new Sample( temp, Instant.now() ) );
 
-                        // mark the time...
-                        lastBatteryErrorEvent = Instant.now();
-                    }
-                }
-
-                // otherwise, handle the sample...
-                else {
-
-                    // add a sample to the filter...
-                    float batteryTemp        = ((rawBattery & THERMOCOUPLE_MASK ) >> THERMOCOUPLE_OFFSET ) /  4.0f;
-                    LOGGER.finest( "Battery temperature read: " + batteryTemp );
-                    batteryFilter.add( new Sample( batteryTemp, Instant.now() ) );
-
-                    // get a temperature sample, if we can...
-                    Sample sample = batteryFilter.getFilteredAt( Instant.now() );
-
-                    // if we got a sample, and it's different than our last sample, send an event...
-                    if( (sample != null) && ((lastBatteryReading == null) || (sample.value != lastBatteryReading.value)) ) {
-                        publishEvent( new BatteryTemperature( sample.value, true, false, false, false, false ) );
-                        lastBatteryReading = sample;
-                    }
-                }
-
-                /* handle the heater reading... */
-                // first get the raw reading...
-                 int rawHeater  = getRaw( heaterTempSPI,  "Heater" );
-
-                // modify if testing is enabled...
-                if( heaterRawTE.isEnabled() )
-                    rawHeater |= heaterRawTE.getAsInt( "mask" );
-
-                 // if there's an error, handle it...
-                if( (rawHeater & FAULT_MASK) != 0 ) {
-
-                    // see if we need to send an event...
-                    if( (lastHeaterErrorEvent == null) || (Instant.now().isAfter( lastHeaterErrorEvent.plusMillis( errorEventIntervalMS ))) ) {
-
-                        // get our flags...
-                        boolean ioerror         = ((rawHeater & IO_ERROR_MASK    ) != 0);
-                        boolean open            = ((rawHeater & OPEN_MASK        ) != 0);
-                        boolean shortToVCC      = ((rawHeater & SHORT_TO_VCC_MASK) != 0);
-                        boolean shortToGnd      = ((rawHeater & SHORT_TO_GND_MASK) != 0);
-
-                        // publish the event...
-                        publishEvent( new HeaterTemperature( -1000, false, ioerror, open, shortToGnd, shortToVCC ) );
-
-                        // mark the time...
-                        lastHeaterErrorEvent = Instant.now();
-                    }
-                }
-
-                // otherwise, handle the sample...
-                else {
-
-                    // add a sample to the filter...
-                    float heaterTemp        = ((rawHeater & THERMOCOUPLE_MASK ) >> THERMOCOUPLE_OFFSET ) /  4.0f;
-                    LOGGER.finest( "Heater temperature read: " + heaterTemp );
-                    heaterFilter.add( new Sample( heaterTemp, Instant.now() ) );
-
-                    // get a temperature reading, if we can...
-                    Sample reading = heaterFilter.getFilteredAt( Instant.now() );
-
-                    // if we got a reading, and it's different than our last reading, send an event...
-                    if( (reading != null) && ((lastHeaterReading == null) || (reading.value != lastHeaterReading.value)) ) {
-                        publishEvent( new HeaterTemperature( reading.value, true, false, false, false, false ) );
-                        if( reading.value < 20f )
-                            LOGGER.finest( heaterFilter.toString() );
-                        lastHeaterReading = reading;
-                    }
-                }
-
-                /*
-                * Now handle the ambient temperature.  Both chips supply it; we use the battery temperature chip if it's got a good reading,
-                * the heater temperature chip otherwise.  If neither is available, we simply don't report ambient temperature.
-                */
-
-                // figure out what we're going to do with respect to ambient temperature...
-                float ambientTemp = Float.NaN;
-                if( (rawBattery & FAULT_MASK) == 0 )
-                    ambientTemp = ((rawBattery & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f;
-                else if( (rawHeater & FAULT_MASK) == 0 )
-                    ambientTemp = ((rawHeater  & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f;
-
-                // round our ambient temperature to the nearest quarter degree, to avoid flooding the zone with ambient temperature change events...
-                ambientTemp = Math.round( ambientTemp * 4 ) / 4f;
-
-                // if we don't have a NaN, then we have a temperature...
-                if( !Float.isNaN( ambientTemp ) ) {
-                    Sample ambient = new Sample( ambientTemp, Instant.now() );
-                    if( (lastAmbientReading == null) || (lastAmbientReading.value != ambient.value) ) {
-                        publishEvent( new AmbientTemperature( ambient.value ) );
-                        lastAmbientReading = ambient;
-                    }
-                }
-            }
-            catch( RuntimeException _e ) {
-
-                // by definition, any exception caught here is, well, exceptional!
-                LOGGER.log( Level.SEVERE, "Unhandled exception in TempReading", _e );
-            }
+            // if we can, get a temperature sample and publish it...
+            Sample sample = _filter.getFilteredAt( Instant.now() );
+            _tempBox.set( new Info<>( (sample == null) ? null : sample.value ) );
         }
+
+        // otherwise, store invalid data...
+        else {
+            _tempBox.set( new Info<>( null ) );
+        }
+
+        return rawTemp;
     }
 
 
@@ -312,6 +280,105 @@ public class TempReader {
         catch( IOException _e ) {
             LOGGER.log( Level.SEVERE, "Error when reading SPI device " + _name, _e );
             return IO_ERROR_MASK;
+        }
+    }
+
+
+    /**
+     * Validatable POJO for {@link TempReader} configuration (see {@link TempReader#TempReader(Config)}).
+     */
+    public static class Config extends AConfig {
+
+        /**
+         * The startup interval between temperature readings as a Duration.  Valid values are in the range [0.1 second .. 10 minutes].
+         */
+        public Duration startupInterval = Duration.ofMillis( 250 );
+
+        /**
+         * The normal interval between temperature readings as a duration.  Valid values are in the range of [5 seconds .. 60 seconds].  Because the
+         * sensor noise has an observed periodicity of about 10 seconds, this value <i>should</i> be relatively prime to 10 seconds.
+         */
+        public Duration normalInterval = Duration.ofSeconds( 7 );
+
+        /**
+         * An instance of the class that implements {@link ErrorCalc}, for the noise filter.
+         */
+        public NoiseFilter.NoiseFilterConfig noiseFilter = new NoiseFilter.NoiseFilterConfig();
+
+
+        /**
+         * Verify the fields of this configuration.
+         */
+        @Override
+        public void verify( final List<String> _messages ) {
+            validate( () -> ((startupInterval != null)
+                            && (Duration.ofMillis( 100 ).compareTo( startupInterval ) < 0)
+                            && (Duration.ofMinutes( 10 ).compareTo( startupInterval ) > 0) ), _messages,
+                    "Temperature Reader startup interval out of range: " + startupInterval.toMillis() + "ms" );
+            validate( () -> ((normalInterval != null)
+                            && (Duration.ofSeconds( 5  ).compareTo( normalInterval ) < 0)
+                            && (Duration.ofMinutes( 60 ).compareTo( normalInterval ) > 0) ), _messages,
+                    "Temperature Reader startup interval out of range: " + normalInterval.toMillis() + "ms" );
+            noiseFilter.verify( _messages );
+        }
+    }
+
+
+    /**
+     * Simple immutable POJO that contains the status of a temperature sensor.
+     */
+    public static class TempSensorStatus {
+
+        /**
+         * {@code True} if the sensor has any kind of problem.
+         */
+        public final boolean sensorProblem;
+
+        /**
+         * {@code True} if there was an I/O error while attempting to read the sensor.
+         */
+        public final boolean ioError;
+
+        /**
+         * {@code True} if the connection to the thermocouple is open.
+         */
+        public final boolean open;
+
+        /**
+         * {@code True} if the connection to the thermocouple is shorted to Vcc.
+         */
+        public final boolean shortToVCC;
+
+        /**
+         * {@code True} if the connection to the thermocouple is shorted to ground.
+         */
+        public final boolean shortToGnd;
+
+
+        /**
+         * Create a new instance of this class with the given values.
+         *
+         * @param _sensorProblem {@code True} if the sensor has any kind of problem.
+         * @param _ioError {@code True} if there was an I/O error while attempting to read the sensor.
+         * @param _open {@code True} if the connection to the thermocouple is open.
+         * @param _shortToVCC {@code True} if the connection to the thermocouple is shorted to Vcc.
+         * @param _shortToGnd {@code True} if the connection to the thermocouple is shorted to ground.
+         */
+        public TempSensorStatus( final boolean _sensorProblem, final boolean _ioError, final boolean _open,
+                                 final boolean _shortToVCC, final boolean _shortToGnd ) {
+
+            sensorProblem = _sensorProblem;
+            ioError = _ioError;
+            open = _open;
+            shortToVCC = _shortToVCC;
+            shortToGnd = _shortToGnd;
+        }
+
+
+        // returns true if any field in this instance is different than a field in the given instance...
+        private boolean changed( final TempSensorStatus _other ) {
+            return (sensorProblem ^ _other.sensorProblem) || (ioError ^ _other.ioError) || (open ^ _other.open)
+                    || (shortToVCC ^ _other.shortToVCC) || (shortToGnd ^ _other.shortToGnd);
         }
     }
 }

@@ -15,6 +15,7 @@ load( "/apps/shedsolar/secret.js" );  // the CPO shared secret...
 var HashMap     = Java.type( "java.util.HashMap" );
 var ArrayList   = Java.type( "java.util.ArrayList" );
 var InetAddress = Java.type( "java.net.InetAddress" );
+var Duration    = Java.type( "java.time.Duration" );
 
 // returns a HashMap with the properties of the given JavaScript object
 function makeMap( obj ) {
@@ -67,12 +68,6 @@ function makeJavaScript( properties, script ) {
  */
 function init( config ) {
 
-    // The mode to run ShedSolar in; the default is "normal".  There are three possibilities:
-    //          "normal": the mode for normal operation
-    //    "assemblyTest": mode that does a simple test of all the hardware components
-    //        "tempTest": mode that runs a simple test of temperature measurement
-        config.mode = "normal";
-
 
     /*
      * CPO (Central Post Office) configuration.
@@ -100,11 +95,14 @@ function init( config ) {
      * Temperature Reader configuration.
      */
 
-    // The interval between temperature readings, in milliseconds.  Valid values are in the range [100..600,000] (0.1 second to 10 minutes).
-    config.tempReader.intervalMS = 250;
+    // The startup interval between temperature readings as a Duration.  Valid values are in the range [0.1 second .. 10 minutes].  The default
+    // value is 250 ms.
+    config.tempReader.startupInterval = Duration.ofMillis( 250 );
 
-    // The interval between error events, in milliseconds.  Valid values are in the range [intervalMS..600,000].
-    config.tempReader.errorEventIntervalMS = 5 * 60 * 1000;  // five minutes...
+    // The normal interval between temperature readings as a duration.  Valid values are in the range of [5 seconds .. 60 seconds].  Because the
+    // sensor noise has an observed periodicity of about 10 seconds, this value SHOULD be relatively prime to 10 seconds.  The default value is
+    // 7 seconds.
+    config.tempReader.normalInterval = Duration.ofSeconds( 7 );
 
     // The number of samples (history) to keep in the filter.  Valid values are 2 or greater.
     config.tempReader.noiseFilter.numSamples = 41;
@@ -289,6 +287,7 @@ function init( config ) {
     // Add the providers to the providers map.  The key is the provider's name; the value is the fully qualified class name of the provider.
     // Any number of providers may be included as long as their names are unique.  The same provider may be provisioned under multiple names.
     config.consoleServer.providers.put( "test", "com.dilatush.util.test.TestConsoleProvider" );
+    config.consoleServer.providers.put( "app", "com.dilatush.shedsolar.ShedSolarConsole" );
 
 
 

@@ -1,9 +1,6 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.shedsolar.events.OutbackFailure;
-import com.dilatush.shedsolar.events.OutbackReading;
 import com.dilatush.util.AConfig;
-import com.dilatush.util.syncevents.SynchronousEvent;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -19,10 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static com.dilatush.shedsolar.App.execute;
-import static com.dilatush.shedsolar.App.schedule;
 import static com.dilatush.util.Internet.isValidHost;
-import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
 
 /**
  * Interrogates the Outback system at a configured IP address or host name, at the configured interval.
@@ -50,7 +44,8 @@ public class Outbacker {
         url           = getURL();
 
         // schedule the execution of the query...
-        schedule( () -> execute( new OutbackerTask() ), 0, interval, TimeUnit.MILLISECONDS );
+        ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate(
+                () -> ShedSolar.instance.executor.execute( new OutbackerTask() ), 0, interval, TimeUnit.MILLISECONDS );
     }
 
 
@@ -146,13 +141,13 @@ public class Outbacker {
 
             // publish an event to tell the world what happened...
             try {
-                SynchronousEvent event = (jsonResponse != null) ? new OutbackReading( new OutbackData( jsonResponse ) ) : new OutbackFailure();
-                publishEvent( event );
-                LOGGER.finest( event.toString() );
+//                SynchronousEvent event = (jsonResponse != null) ? new OutbackReading( new OutbackData( jsonResponse ) ) : new OutbackFailure();
+//                publishEvent( event );
+//                LOGGER.finest( event.toString() );
             }
             catch( JSONException _e ) {
                 LOGGER.log( Level.WARNING, "Problem decoding Outback JSON response", _e );
-                publishEvent( new OutbackFailure() );
+//                publishEvent( new OutbackFailure() );
             } catch( RuntimeException _e ) {
                 LOGGER.log( Level.SEVERE, "Unhandled exception in OutbackerTask", _e );
             }

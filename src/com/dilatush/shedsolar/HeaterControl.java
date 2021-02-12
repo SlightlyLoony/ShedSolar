@@ -1,6 +1,5 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.shedsolar.events.*;
 import com.dilatush.util.AConfig;
 import com.pi4j.io.gpio.*;
 
@@ -11,10 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static com.dilatush.shedsolar.App.schedule;
 import static com.dilatush.shedsolar.TemperatureMode.PRODUCTION;
-import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
-import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
@@ -86,7 +82,7 @@ public class HeaterControl {
         long tickTime                   = _config.tickTime;
 
         // initialize the GPIO pins for the SSR, the SSR sense relay, and the heater on indicator LED...
-        GpioController       controller     = App.instance.gpio;
+        GpioController       controller     = ShedSolar.instance.getGPIO();
         ssrSense       = controller.provisionDigitalInputPin(  RaspiPin.GPIO_00, "SSR Sense",        PinPullResistance.PULL_UP );
         heaterPowerLED = controller.provisionDigitalOutputPin( RaspiPin.GPIO_03, "Heater Power LED", PinState.HIGH             );
         heaterSSR      = controller.provisionDigitalOutputPin( RaspiPin.GPIO_05, "Heater SSR",       PinState.HIGH             );
@@ -98,14 +94,14 @@ public class HeaterControl {
         range = productionRange;
 
         // subscribe to the events we want to monitor...
-        subscribeToEvent( event -> handleTempModeEvent(            (TempMode)           event ),  TempMode.class            );
-        subscribeToEvent( event -> handleBatteryTemperatureEvent(  (BatteryTemperature) event ),  BatteryTemperature.class  );
-        subscribeToEvent( event -> handleHeaterTemperatureEvent(   (HeaterTemperature)  event ),  HeaterTemperature.class   );
-        subscribeToEvent( event -> handleAmbientTemperatureEvent(  (AmbientTemperature)  event ), AmbientTemperature.class  );
+//        subscribeToEvent( event -> handleTempModeEvent(            (TempMode)           event ),  TempMode.class            );
+//        subscribeToEvent( event -> handleBatteryTemperatureEvent(  (BatteryTemperature) event ),  BatteryTemperature.class  );
+//        subscribeToEvent( event -> handleHeaterTemperatureEvent(   (HeaterTemperature)  event ),  HeaterTemperature.class   );
+//        subscribeToEvent( event -> handleAmbientTemperatureEvent(  (AmbientTemperature)  event ), AmbientTemperature.class  );
 
         // schedule our state machine tick...
         stateMachine = new HeaterStateMachine();
-        schedule( stateMachine, 0, tickTime, MILLISECONDS );
+        ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate( stateMachine, 0, tickTime, MILLISECONDS );
     }
 
 
@@ -417,7 +413,7 @@ public class HeaterControl {
             heaterPowerLED.low();
 
             // tell the rest of the world what we did...
-            publishEvent( new HeaterOn() );
+//            publishEvent( new HeaterOn() );
         }
 
 
@@ -501,15 +497,15 @@ public class HeaterControl {
                 // otherwise, it looks like our heater has failed, so we're just gonna abort...
                 else {
                     LOGGER.finest( "Heater verification: SSR sensed, but no temperature increases; possible heater failure" );
-                    publishEvent( new HeaterFailure() );
-                    publishEvent( new HeaterControlAbort() );
+//                    publishEvent( new HeaterFailure() );
+//                    publishEvent( new HeaterControlAbort() );
                     return new Abort();
                 }
             }
 
             // otherwise if we're sensing that the SSR is off, it looks like we have an SSR failure, so all we can do is scream and abort...
             LOGGER.finest( "Heater verification: SSR not sensed, and temperature increases; possible SSR failure" );
-            publishEvent( new SSRStuckOff() );
+//            publishEvent( new SSRStuckOff() );
             return new Abort();
         }
 
@@ -517,7 +513,7 @@ public class HeaterControl {
         private void checkSSRSenseOn() {
             if( ssrSense.isHigh() ) {
                 LOGGER.finest( "Heater verification: SSR sense not on" );
-                publishEvent( new SSRSenseFailure( "stuck off" ) );
+//                publishEvent( new SSRSenseFailure( "stuck off" ) );
             }
         }
     }
@@ -616,7 +612,7 @@ public class HeaterControl {
             heaterPowerLED.high();
 
             // tell the rest of the world what we did...
-            publishEvent( new HeaterOff() );
+//            publishEvent( new HeaterOff() );
         }
 
 
@@ -639,17 +635,17 @@ public class HeaterControl {
      * The following methods implement event handlers.
      */
 
-    /**
+    /*
      * Handle a mode (production/dormant) event.
      *
      * @param _event the mode event
      */
-    private void handleTempModeEvent( TempMode _event ) {
-
-        LOGGER.finest( _event.toString() );
-        mode = _event.mode;
-        range = (mode == PRODUCTION) ? productionRange : dormantRange;
-    }
+//    private void handleTempModeEvent( TempMode _event ) {
+//
+//        LOGGER.finest( _event.toString() );
+//        mode = _event.mode;
+//        range = (mode == PRODUCTION) ? productionRange : dormantRange;
+//    }
 
 
     private static class TemperatureRange {
@@ -669,12 +665,12 @@ public class HeaterControl {
      *
      * @param _event the battery temperature event
      */
-    private void handleBatteryTemperatureEvent( BatteryTemperature _event ) {
-
-        LOGGER.finest( _event.toString() );
-        batteryTemperature = _event.degreesC;
-        batteryTemperatureGood = _event.goodMeasurement;
-    }
+//    private void handleBatteryTemperatureEvent( BatteryTemperature _event ) {
+//
+//        LOGGER.finest( _event.toString() );
+//        batteryTemperature = _event.degreesC;
+//        batteryTemperatureGood = _event.goodMeasurement;
+//    }
 
 
     /**
@@ -682,12 +678,12 @@ public class HeaterControl {
      *
      * @param _event the heater temperature event
      */
-    private void handleHeaterTemperatureEvent( HeaterTemperature _event ) {
-
-        LOGGER.finest( _event.toString() );
-        heaterTemperature = _event.degreesC;
-        heaterTemperatureGood = _event.goodMeasurement;
-    }
+//    private void handleHeaterTemperatureEvent( HeaterTemperature _event ) {
+//
+//        LOGGER.finest( _event.toString() );
+//        heaterTemperature = _event.degreesC;
+//        heaterTemperatureGood = _event.goodMeasurement;
+//    }
 
 
     /**
@@ -695,10 +691,10 @@ public class HeaterControl {
      *
      * @param _event the heater temperature event
      */
-    private void handleAmbientTemperatureEvent( AmbientTemperature _event ) {
-
-        LOGGER.finest( _event.toString() );
-        ambientTemperature = _event.degreesC;
-        ambientTemperatureGood = true;
-    }
+//    private void handleAmbientTemperatureEvent( AmbientTemperature _event ) {
+//
+//        LOGGER.finest( _event.toString() );
+//        ambientTemperature = _event.degreesC;
+//        ambientTemperatureGood = true;
+//    }
 }

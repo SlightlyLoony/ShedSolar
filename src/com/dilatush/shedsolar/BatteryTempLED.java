@@ -1,6 +1,5 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.shedsolar.events.BatteryTemperature;
 import com.dilatush.util.AConfig;
 import com.pi4j.io.gpio.GpioPinDigitalOutput;
 import com.pi4j.io.gpio.PinState;
@@ -9,8 +8,6 @@ import com.pi4j.io.gpio.RaspiPin;
 import java.util.List;
 import java.util.logging.Logger;
 
-import static com.dilatush.shedsolar.App.schedule;
-import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
@@ -57,11 +54,11 @@ public class BatteryTempLED {
         started = false;
 
         // set up our GPIO pin...
-        led = App.instance.gpio.provisionDigitalOutputPin( RaspiPin.GPIO_02, "Battery Temperature", PinState.HIGH );
+        led = ShedSolar.instance.getGPIO().provisionDigitalOutputPin( RaspiPin.GPIO_02, "Battery Temperature", PinState.HIGH );
         led.setShutdownOptions( true, PinState.HIGH );
 
         // subscribe to battery temperature readings...
-        subscribeToEvent( event -> handleBatteryTempEvent( (BatteryTemperature) event ), BatteryTemperature.class );
+// TODO        subscribeToEvent( event -> handleBatteryTempEvent( (BatteryTemperature) event ), BatteryTemperature.class );
     }
 
 
@@ -116,23 +113,23 @@ public class BatteryTempLED {
     }
 
 
-    /**
-     * Handle the battery temperature event that the constructor subscribed us to.
-     *
-     * @param _event the battery temperature event
-     */
-    public void handleBatteryTempEvent( final BatteryTemperature _event ) {
-
-        // record our latest battery temperature information...
-        goodBatteryTemp = _event.goodMeasurement;
-        batteryTemp = _event.degreesC;
-
-        // if we haven't yet started the LED flashing, do so now...
-        if( !started ) {
-            started = true;
-            new On().run();
-        }
-    }
+//    /**
+//     * Handle the battery temperature event that the constructor subscribed us to.
+//     *
+//     * @param _event the battery temperature event
+//     */
+//    public void handleBatteryTempEvent( final BatteryTemperature _event ) {
+//
+//        // record our latest battery temperature information...
+//        goodBatteryTemp = _event.goodMeasurement;
+//        batteryTemp = _event.degreesC;
+//
+//        // if we haven't yet started the LED flashing, do so now...
+//        if( !started ) {
+//            started = true;
+//            new On().run();
+//        }
+//    }
 
 
     /**
@@ -155,12 +152,12 @@ public class BatteryTempLED {
             led.setState( PinState.LOW );
 
             if( goodBatteryTemp ) {
-                schedule( new Off(), onMS( batteryTemp ), MILLISECONDS );
-                schedule( new On(), normalInterval, MILLISECONDS );
+                ShedSolar.instance.scheduledExecutor.schedule( new Off(), onMS( batteryTemp ), MILLISECONDS );
+                ShedSolar.instance.scheduledExecutor.schedule( new On(), normalInterval, MILLISECONDS );
             }
             else {
-                schedule( new Off(), errorInterval / 2, MILLISECONDS );
-                schedule( new On(), errorInterval, MILLISECONDS );
+                ShedSolar.instance.scheduledExecutor.schedule( new Off(), errorInterval / 2, MILLISECONDS );
+                ShedSolar.instance.scheduledExecutor.schedule( new On(), errorInterval, MILLISECONDS );
             }
         }
     }

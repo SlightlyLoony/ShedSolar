@@ -3,18 +3,12 @@ package com.dilatush.shedsolar;
 import com.dilatush.mop.Actor;
 import com.dilatush.mop.Message;
 import com.dilatush.mop.PostOffice;
-import com.dilatush.shedsolar.events.CPOFailure;
-import com.dilatush.shedsolar.events.Weather;
-import com.dilatush.shedsolar.events.WeatherFailure;
 import org.json.JSONException;
 
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import static com.dilatush.shedsolar.App.schedule;
-import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
 
 /**
  * Provides an MOP actor that provides the mailbox "shedsolar.main" and listens for once-per-minute weather reports.  Additionally this class checks
@@ -42,7 +36,7 @@ public class ShedSolarActor extends Actor {
         super( _po, mailboxName );
 
         // start our checker going (to see if we're receiving weather reports)...
-        checker = schedule( new Checker(), MAX_WEATHER_REPORT_DELAY, TimeUnit.MILLISECONDS );
+        checker = ShedSolar.instance.scheduledExecutor.schedule( new Checker(), MAX_WEATHER_REPORT_DELAY, TimeUnit.MILLISECONDS );
 
         // register our handlers...
         registerFQPublishMessageHandler( this::handleWeatherReport, "weather.weather", "minute", "report" );
@@ -71,10 +65,10 @@ public class ShedSolarActor extends Actor {
             LOGGER.finest( String.format( "Weather message, solar irradiance is %1$.0f watts/meter2, temperature is %2$.1fC", solar, temp ) );
 
             // send an event with this data...
-            publishEvent( new Weather( solar, temp ) );
+// TODO            publishEvent( new Weather( solar, temp ) );
 
             // start a new checker...
-            checker = schedule( new Checker(), MAX_WEATHER_REPORT_DELAY, TimeUnit.MILLISECONDS );
+            checker = ShedSolar.instance.scheduledExecutor.schedule( new Checker(), MAX_WEATHER_REPORT_DELAY, TimeUnit.MILLISECONDS );
         }
         catch( JSONException _e ) {
             LOGGER.log( Level.SEVERE, "Problem extracting data from weather message: " + _e.getMessage(), _e );
@@ -94,17 +88,17 @@ public class ShedSolarActor extends Actor {
         public void run() {
 
             // send a weather failure event...
-            publishEvent( new WeatherFailure() );
+// TODO            publishEvent( new WeatherFailure() );
 
             // this time wait longer before we send the next one...
-            checker = schedule( new Checker(), DELAY_BETWEEN_FAILURE_EVENTS, TimeUnit.MILLISECONDS );
+            checker = ShedSolar.instance.scheduledExecutor.schedule( new Checker(), DELAY_BETWEEN_FAILURE_EVENTS, TimeUnit.MILLISECONDS );
 
             LOGGER.info( "Failed to receive weather report" );
 
             // a little problem analysis here...
             // if we've lost connection to the post office, publish an event to that effect...
-            if( !App.instance.po.isConnected() ) {
-                publishEvent( new CPOFailure() );
+            if( !ShedSolar.instance.isPostOfficeConnected() ) {
+// TODO                publishEvent( new CPOFailure() );
             }
 
             // otherwise, try re-subscribing...

@@ -1,6 +1,5 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.shedsolar.events.*;
 import com.dilatush.util.AConfig;
 import org.shredzone.commons.suncalc.SunTimes;
 
@@ -12,11 +11,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static com.dilatush.shedsolar.App.schedule;
 import static com.dilatush.shedsolar.TemperatureMode.DORMANT;
 import static com.dilatush.shedsolar.TemperatureMode.PRODUCTION;
-import static com.dilatush.util.syncevents.SynchronousEvents.publishEvent;
-import static com.dilatush.util.syncevents.SynchronousEvents.subscribeToEvent;
 
 // TODO: enhance this to detect and handle cloudy days, snow-covered panels, etc.
 // TODO: change to use panel power (In_V and In_I, multiplied) instead of threshold voltage...
@@ -70,16 +66,16 @@ public class ProductionDetector {
         lastMode           = PRODUCTION;    // we assume production mode on startup, just to be safe...
 
         // subscribe to the events we need to listen to...
-        subscribeToEvent( event -> handleWeatherEvent(        (Weather) event        ), Weather.class        );
-        subscribeToEvent( event -> handleWeatherFailureEvent( (WeatherFailure) event ), WeatherFailure.class );
-        subscribeToEvent( event -> handleOutbackReadingEvent( (OutbackReading) event ), OutbackReading.class );
-        subscribeToEvent( event -> handleOutbackFailureEvent( (OutbackFailure) event ), OutbackFailure.class );
+//        subscribeToEvent( event -> handleWeatherEvent(        (Weather) event        ), Weather.class        );
+//        subscribeToEvent( event -> handleWeatherFailureEvent( (WeatherFailure) event ), WeatherFailure.class );
+//        subscribeToEvent( event -> handleOutbackReadingEvent( (OutbackReading) event ), OutbackReading.class );
+//        subscribeToEvent( event -> handleOutbackFailureEvent( (OutbackFailure) event ), OutbackFailure.class );
 
         // announce our default production mode...
-        publishEvent( new TempMode( lastMode ) );
+//        publishEvent( new TempMode( lastMode ) );
 
         // schedule our detector...
-        schedule( new Detector(), interval, interval, TimeUnit.MILLISECONDS );
+        ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate( new Detector(), interval, interval, TimeUnit.MILLISECONDS );
     }
 
 
@@ -209,7 +205,7 @@ public class ProductionDetector {
                      // it's time to transition to dormant mode...
                      lastMode = DORMANT;
                      minutesSinceChange = 0;
-                     publishEvent( new TempMode( lastMode ) );
+//                     publishEvent( new TempMode( lastMode ) );
 
                  }
                  else if( (lastMode == DORMANT) && (minutesSinceChange >= toProductionDelay) ) {
@@ -217,7 +213,7 @@ public class ProductionDetector {
                      // it's time to transition to production mode...
                      lastMode = PRODUCTION;
                      minutesSinceChange = 0;
-                     publishEvent( new TempMode( lastMode ) );
+//                     publishEvent( new TempMode( lastMode ) );
                  }
              }
              catch( RuntimeException _e ) {
@@ -227,51 +223,51 @@ public class ProductionDetector {
     }
 
 
-    /**
-     * Handle the Outback reading event that the constructor subscribed us to.
-     *
-     * @param _event the Outback reading event
-     */
-    private void handleOutbackReadingEvent( final OutbackReading _event ) {
-        outbackGood = true;
-        panelVoltage = (float) _event.outbackData.panelVoltage;
-        panelCurrent = (float) _event.outbackData.panelCurrent;
-        LOGGER.finest( _event.toString() );
-    }
+//    /**
+//     * Handle the Outback reading event that the constructor subscribed us to.
+//     *
+//     * @param _event the Outback reading event
+//     */
+//    private void handleOutbackReadingEvent( final OutbackReading _event ) {
+//        outbackGood = true;
+//        panelVoltage = (float) _event.outbackData.panelVoltage;
+//        panelCurrent = (float) _event.outbackData.panelCurrent;
+//        LOGGER.finest( _event.toString() );
+//    }
 
 
-    /**
-     * Handle the weather event that the constructor subscribed us to.
-     *
-     * @param _event the weather event
-     */
-    private void handleWeatherEvent( final Weather _event ) {
-        weatherGood = true;
-        pyrometerPower = (float) _event.irradiance;
-        LOGGER.finest( _event.toString() );
-    }
+//    /**
+//     * Handle the weather event that the constructor subscribed us to.
+//     *
+//     * @param _event the weather event
+//     */
+//    private void handleWeatherEvent( final Weather _event ) {
+//        weatherGood = true;
+//        pyrometerPower = (float) _event.irradiance;
+//        LOGGER.finest( _event.toString() );
+//    }
 
 
-    /**
-     * Handle the Outback reading event that the constructor subscribed us to.
-     *
-     * @param _event the Outback reading event
-     */
-    private void handleOutbackFailureEvent( final OutbackFailure _event ) {
-        outbackGood = false;
-        LOGGER.finest( _event.toString() );
-    }
+//    /**
+//     * Handle the Outback reading event that the constructor subscribed us to.
+//     *
+//     * @param _event the Outback reading event
+//     */
+//    private void handleOutbackFailureEvent( final OutbackFailure _event ) {
+//        outbackGood = false;
+//        LOGGER.finest( _event.toString() );
+//    }
 
 
-    /**
-     * Handle the weather event that the constructor subscribed us to.
-     *
-     * @param _event the weather event
-     */
-    private void handleWeatherFailureEvent( final WeatherFailure _event ) {
-        weatherGood = false;
-        LOGGER.finest( _event.toString() );
-    }
+//    /**
+//     * Handle the weather event that the constructor subscribed us to.
+//     *
+//     * @param _event the weather event
+//     */
+//    private void handleWeatherFailureEvent( final WeatherFailure _event ) {
+//        weatherGood = false;
+//        LOGGER.finest( _event.toString() );
+//    }
 
 
     /**
