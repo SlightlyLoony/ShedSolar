@@ -1,6 +1,9 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.util.AConfig;
+import com.dilatush.util.info.Info;
+import com.dilatush.util.info.InfoBox;
+import com.dilatush.util.info.InfoView;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -27,6 +30,10 @@ public class Outbacker {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
+    // our published data...
+    public  final InfoView<OutbackData> outback;
+    private final InfoBox<OutbackData>  outbackBox;
+
     private final String host;
     private final URL url;
 
@@ -43,9 +50,14 @@ public class Outbacker {
         long interval = _config.interval;
         url           = getURL();
 
+        // set up the publishing...
+        outbackBox = new InfoBox<>();
+        outback = new InfoView<>( outbackBox );
+
         // schedule the execution of the query...
         ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate(
-                () -> ShedSolar.instance.executor.execute( new OutbackerTask() ), 0, interval, TimeUnit.MILLISECONDS );
+                () -> ShedSolar.instance.executor.execute( this::run ), 0, interval, TimeUnit.MILLISECONDS
+        );
     }
 
 
@@ -89,68 +101,72 @@ public class Outbacker {
 
 
     /**
-     * This class does all the real work.  It executes in the blocking I/O thread provided by the app's executor service.
+     * Runs periodically to interrogate the Outback charger/inverter.
      */
-    private class OutbackerTask  implements Runnable {
+    private void run() {
 
-        @Override
-        public void run() {
+        // get the JSON response from the Outback system...
+        JSONObject jsonResponse = null;
+        try {
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setDoOutput( true );
+            conn.setRequestMethod( "GET" );
+            conn.setRequestProperty( "Content-Type", "application/json" );
 
-            // get the JSON response from the Outback system...
-            JSONObject jsonResponse = null;
-            try {
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setDoOutput( true );
-                conn.setRequestMethod( "GET" );
-                conn.setRequestProperty( "Content-Type", "application/json" );
+            // if we have to wait more than a second, something's wrong...
+            conn.setConnectTimeout( 1000 );
+            conn.setReadTimeout( 1000 );
 
-                // if we have to wait more than a second, something's wrong...
-                conn.setConnectTimeout( 1000 );
-                conn.setReadTimeout( 1000 );
-
-                if( conn.getResponseCode() != 200 ) {
-                    throw new RuntimeException( "Failed : HTTP error code : " + conn.getResponseCode() );
-                }
-
-                BufferedReader br = new BufferedReader( new InputStreamReader(
-                        (conn.getInputStream()) ) );
-
-                String jrs;
-                StringBuilder jsonResponseString = new StringBuilder();
-                do {
-                    jrs = br.readLine();
-                    if( jrs != null )
-                        jsonResponseString.append( jrs );
-                } while( jrs != null );
-
-                jsonResponse = new JSONObject( jsonResponseString.toString() );
-
-                conn.disconnect();
-
-            } catch( SocketTimeoutException _e ) {
-                LOGGER.log( Level.WARNING, "Socket timed out when reading Outback data", _e );
-                jsonResponse = null;
-            } catch( IOException _e ) {
-                LOGGER.log( Level.SEVERE, "Error when reading Outback data", _e );
-                jsonResponse = null;
-            } catch( JSONException _e ) {
-                LOGGER.log( Level.SEVERE, "Error parsing Outback data", _e );
-            } catch( RuntimeException _e ) {
-                LOGGER.log( Level.SEVERE, "Unhandled exception in OutbackerTask", _e );
+            if( conn.getResponseCode() != 200 ) {
+                throw new RuntimeException( "Failed : HTTP error code : " + conn.getResponseCode() );
             }
 
-            // publish an event to tell the world what happened...
-            try {
-//                SynchronousEvent event = (jsonResponse != null) ? new OutbackReading( new OutbackData( jsonResponse ) ) : new OutbackFailure();
-//                publishEvent( event );
-//                LOGGER.finest( event.toString() );
+            BufferedReader br = new BufferedReader( new InputStreamReader( (conn.getInputStream()) ) );
+
+            String jrs;
+            StringBuilder jsonResponseString = new StringBuilder();
+            do {
+                jrs = br.readLine();
+                if( jrs != null )
+                    jsonResponseString.append( jrs );
+            } while( jrs != null );
+
+            jsonResponse = new JSONObject( jsonResponseString.toString() );
+
+            conn.disconnect();
+
+        } catch( SocketTimeoutException _e ) {
+            LOGGER.log( Level.WARNING, "Socket timed out when reading Outback data", _e );
+            jsonResponse = null;
+        } catch( IOException _e ) {
+            LOGGER.log( Level.SEVERE, "Error when reading Outback data", _e );
+            jsonResponse = null;
+        } catch( JSONException _e ) {
+            LOGGER.log( Level.SEVERE, "Error parsing Outback data", _e );
+        } catch( RuntimeException _e ) {
+            LOGGER.log( Level.SEVERE, "Unhandled exception in OutbackerTask", _e );
+        }
+
+        // publish our data...
+        try {
+
+            // if we got the data, this should be easy...
+            if( jsonResponse != null ) {
+                OutbackData data = new OutbackData( jsonResponse );
+                outbackBox.set( new Info<>( data ) );
+                LOGGER.finest( data::toString );
             }
-            catch( JSONException _e ) {
-                LOGGER.log( Level.WARNING, "Problem decoding Outback JSON response", _e );
-//                publishEvent( new OutbackFailure() );
-            } catch( RuntimeException _e ) {
-                LOGGER.log( Level.SEVERE, "Unhandled exception in OutbackerTask", _e );
+
+            // if we didn't get the data, make it unavailable...
+            else {
+                outbackBox.set( new Info<>( null ) );
+                LOGGER.warning( "Failed to get data from Outback Mate3S" );
             }
+        }
+        catch( JSONException _e ) {
+            LOGGER.log( Level.WARNING, "Problem decoding Outback JSON response", _e );
+        } catch( Exception _e ) {
+            LOGGER.log( Level.SEVERE, "Unhandled exception in OutbackerTask", _e );
         }
     }
 }

@@ -74,6 +74,8 @@ public class ShedSolarConsole extends CommandProcessorConsoleProvider {
             writeLine( "Battery Temperature: " + getTemp( shedSolar.batteryTemperature.get() ) );
             writeLine( "Heater Temperature:  " + getTemp( shedSolar.heaterTemperature.get()  ) );
             writeLine( "Ambient Temperature: " + getTemp( shedSolar.ambientTemperature.get() ) );
+            writeLine( shedSolar.outback.get().info.toString()
+            );
         }
     }
 }

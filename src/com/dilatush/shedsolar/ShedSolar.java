@@ -32,22 +32,23 @@ import static java.lang.Thread.sleep;
  */
 public class ShedSolar {
 
-    // TODO: set up a console provider for published values...
-
     public  static final ShedSolar instance = new ShedSolar();
 
-    private static final long MAX_CPO_WAIT_MS = 10000;
-    private static final int HAPS_QUEUE_SIZE = 100;
+    private static final long MAX_CPO_WAIT_MS = 2000;
+    private static final int  MAX_CPO_TRIES   = 3;
+    private static final int  HAPS_QUEUE_SIZE = 100;
 
     // our infoviews...
-    public final InfoViewer<Float>  batteryTemperature;
-    public final InfoViewer<Float>  heaterTemperature;
-    public final InfoViewer<Float>  ambientTemperature;
+    public final InfoViewer<Float>       batteryTemperature;
+    public final InfoViewer<Float>       heaterTemperature;
+    public final InfoViewer<Float>       ambientTemperature;
+    public final InfoViewer<OutbackData> outback;
 
     // and our boxes...
-    private final InfoViewerBox<Float> batteryTemperatureBox;
-    private final InfoViewerBox<Float> heaterTemperatureBox;
-    private final InfoViewerBox<Float> ambientTemperatureBox;
+    private final InfoViewerBox<Float>       batteryTemperatureBox;
+    private final InfoViewerBox<Float>       heaterTemperatureBox;
+    private final InfoViewerBox<Float>       ambientTemperatureBox;
+    private final InfoViewerBox<OutbackData> outbackBox;
 
     public final ScheduledExecutor   scheduledExecutor;  // a single-threaded scheduled executor for all to use...
     public final ExecutorService     executor;           // a single-threaded executor to do all blocking I/O on...
@@ -95,6 +96,8 @@ public class ShedSolar {
         heaterTemperature     = new ProxyInfoView<>( heaterTemperatureBox );
         ambientTemperatureBox = new InfoViewerBox<>();
         ambientTemperature    = new ProxyInfoView<>( ambientTemperatureBox );
+        outbackBox            = new InfoViewerBox<>();
+        outback               = new ProxyInfoView<>( outbackBox );
 
         // start up our haps (events), using our "global" scheduled executor...
         haps = new Haps<>( HAPS_QUEUE_SIZE, scheduledExecutor, Events.INTERNET_DOWN );
@@ -198,8 +201,9 @@ public class ShedSolar {
 //            // set up our battery temperature LED...
 //            batteryTempLED = new BatteryTempLED( config.batteryTempLED );
 //
-//            // set up our Outback interrogator...
-//            outbacker = new Outbacker( config.outbacker );
+            // set up our Outback interrogator...
+            outbacker = new Outbacker( config.outbacker );
+            outbackBox.set( outbacker.outback );
 //
 //            // set up our production/dormancy discriminator...
 //            productionDetector = new ProductionDetector( config.productionDetector );
@@ -212,6 +216,7 @@ public class ShedSolar {
             batteryTemperatureBox.set( tempReader.batteryTemperature );
             heaterTemperatureBox.set ( tempReader.heaterTemperature  );
             ambientTemperatureBox.set( tempReader.ambientTemperature );
+
         }
 
         // if we get ANY exception during the app startup, we consider it to be fatal...
@@ -243,29 +248,33 @@ public class ShedSolar {
     @SuppressWarnings("BusyWait")
     private void establishCPO() {
 
-        // create our post office, which initiates the connection to the CPO...
-        po = new PostOffice( config.cpo );
+        int tries = 0;
+        while( tries++ < MAX_CPO_TRIES ) {
 
-        // wait a bit for the CPO to connect...
-        long start = System.currentTimeMillis();
-        while( (System.currentTimeMillis() - start) < MAX_CPO_WAIT_MS ) {
+            // create our post office, which initiates the connection to the CPO...
+            po = new PostOffice( config.cpo );
 
-            // let some other things run...
-            try {
-                sleep( 100 );
-            }
-            // if this happens somehow, it's fatal...
-            catch( InterruptedException _e ) {
-                System.exit( 1 );
-            }
+            // wait a bit for the CPO to connect...
+            long start = System.currentTimeMillis();
+            while( (System.currentTimeMillis() - start) < MAX_CPO_WAIT_MS ) {
 
-            // have we connected to the CPO yet?
-            if( po.isConnected() ) {
+                // let some other things run...
+                try {
+                    sleep( 100 );
+                }
+                // if this happens somehow, it's fatal...
+                catch( InterruptedException _e ) {
+                    System.exit( 1 );
+                }
 
-                // yup, so start our actor and get out of here...
-                actor = new ShedSolarActor( po );
-                LOGGER.info( "Connected to CPO" );
-                return;
+                // have we connected to the CPO yet?
+                if( po.isConnected() ) {
+
+                    // yup, so start our actor and get out of here...
+                    actor = new ShedSolarActor( po );
+                    LOGGER.info( "Connected to CPO" );
+                    return;
+                }
             }
         }
 
