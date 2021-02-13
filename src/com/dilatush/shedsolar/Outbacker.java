@@ -2,7 +2,6 @@ package com.dilatush.shedsolar;
 
 import com.dilatush.util.AConfig;
 import com.dilatush.util.info.Info;
-import com.dilatush.util.info.InfoBox;
 import com.dilatush.util.info.InfoView;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -14,8 +13,9 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
+import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -31,8 +31,9 @@ public class Outbacker {
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
     // our published data...
-    public  final InfoView<OutbackData> outback;
-    private final InfoBox<OutbackData>  outbackBox;
+    public  final Info<OutbackData>     outback;
+
+    private Consumer<OutbackData> outbackSetter;
 
     private final String host;
     private final URL url;
@@ -47,16 +48,14 @@ public class Outbacker {
 
         // set this thing up...
         host          = _config.host;
-        long interval = _config.interval;
         url           = getURL();
 
         // set up the publishing...
-        outbackBox = new InfoBox<>();
-        outback = new InfoView<>( outbackBox );
+        outback = new InfoView<>( (setter) -> outbackSetter = setter, false );
 
         // schedule the execution of the query...
         ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate(
-                () -> ShedSolar.instance.executor.execute( this::run ), 0, interval, TimeUnit.MILLISECONDS
+                () -> ShedSolar.instance.executor.execute( this::run ), Duration.ZERO, Duration.ofMillis( _config.interval )
         );
     }
 
@@ -153,13 +152,13 @@ public class Outbacker {
             // if we got the data, this should be easy...
             if( jsonResponse != null ) {
                 OutbackData data = new OutbackData( jsonResponse );
-                outbackBox.set( new Info<>( data ) );
+                outbackSetter.accept( data );
                 LOGGER.finest( data::toString );
             }
 
             // if we didn't get the data, make it unavailable...
             else {
-                outbackBox.set( new Info<>( null ) );
+                outbackSetter.accept( null );
                 LOGGER.warning( "Failed to get data from Outback Mate3S" );
             }
         }

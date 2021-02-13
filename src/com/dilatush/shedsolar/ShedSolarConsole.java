@@ -51,8 +51,9 @@ public class ShedSolarConsole extends CommandProcessorConsoleProvider {
 
 
     private String getTemp( final Info<Float> _temp ) {
-        if( _temp.isAvailable() ) {
-            return tempFormatter.format( Conversions.fromCtoF( _temp.info ) ) + "°F (" + getTime( _temp.timestamp ) + ")";
+        if( _temp.isInfoAvailable() ) {
+            Info<Float> info = _temp.getInfoSource();
+            return tempFormatter.format( Conversions.fromCtoF( info.getInfo() ) ) + "°F (" + getTime( info.getInfoTimestamp() ) + ")";
         }
         else
             return "?";
@@ -71,11 +72,14 @@ public class ShedSolarConsole extends CommandProcessorConsoleProvider {
 
             Instant now = Instant.now( Clock.systemUTC() );
             writeLine( "On " + getDate( now ) + " " + getTime( now ) );
-            writeLine( "Battery Temperature: " + getTemp( shedSolar.batteryTemperature.get() ) );
-            writeLine( "Heater Temperature:  " + getTemp( shedSolar.heaterTemperature.get()  ) );
-            writeLine( "Ambient Temperature: " + getTemp( shedSolar.ambientTemperature.get() ) );
-            writeLine( shedSolar.outback.get().info.toString()
-            );
+            writeLine( "Battery Temperature: " + getTemp( shedSolar.batteryTemperature.getInfoSource() ) );
+            writeLine( "Heater Temperature:  " + getTemp( shedSolar.heaterTemperature.getInfoSource()  ) );
+            writeLine( "Ambient Temperature: " + getTemp( shedSolar.ambientTemperature.getInfoSource() ) );
+            if( shedSolar.outback.isInfoAvailable() )
+                writeLine( shedSolar.outback.getInfo().toString() );
+            if( shedSolar.solarIrradiance.isInfoAvailable() )
+                writeLine( String.format( "Solar Irradiance: %1$.0f watts/sq. meter", shedSolar.solarIrradiance.getInfo() ) );
+            writeLine( "Outside Temperature: " + getTemp( shedSolar.outsideTemperature.getInfoSource() ) );
         }
     }
 }

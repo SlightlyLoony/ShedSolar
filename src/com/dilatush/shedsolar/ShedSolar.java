@@ -3,6 +3,7 @@ package com.dilatush.shedsolar;
 import com.dilatush.mop.PostOffice;
 import com.dilatush.util.AConfig;
 import com.dilatush.util.AConfig.InitResult;
+import com.dilatush.util.ExecutorService;
 import com.dilatush.util.Haps;
 import com.dilatush.util.ScheduledExecutor;
 import com.dilatush.util.cli.CommandLine;
@@ -13,15 +14,13 @@ import com.dilatush.util.cli.argdefs.OptArgDef;
 import com.dilatush.util.cli.argdefs.OptArgNames;
 import com.dilatush.util.cli.parsers.EnumerationParser;
 import com.dilatush.util.console.ConsoleServer;
-import com.dilatush.util.info.InfoViewer;
-import com.dilatush.util.info.InfoViewerBox;
-import com.dilatush.util.info.ProxyInfoView;
+import com.dilatush.util.info.Info;
+import com.dilatush.util.info.InfoView;
 import com.dilatush.util.test.TestManager;
 import com.pi4j.io.gpio.GpioController;
 import com.pi4j.io.gpio.GpioFactory;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -38,23 +37,28 @@ public class ShedSolar {
     private static final int  MAX_CPO_TRIES   = 3;
     private static final int  HAPS_QUEUE_SIZE = 100;
 
-    // our infoviews...
-    public final InfoViewer<Float>       batteryTemperature;
-    public final InfoViewer<Float>       heaterTemperature;
-    public final InfoViewer<Float>       ambientTemperature;
-    public final InfoViewer<OutbackData> outback;
+    // our public info...
+    public final Info<Float>         batteryTemperature;
+    public final Info<Float>         heaterTemperature;
+    public final Info<Float>         ambientTemperature;
+    public final Info<OutbackData>   outback;
+    public final Info<Float>         outsideTemperature;
+    public final Info<Float>         solarIrradiance;
 
-    // and our boxes...
-    private final InfoViewerBox<Float>       batteryTemperatureBox;
-    private final InfoViewerBox<Float>       heaterTemperatureBox;
-    private final InfoViewerBox<Float>       ambientTemperatureBox;
-    private final InfoViewerBox<OutbackData> outbackBox;
+    // and our setters...
+    private Consumer<Info<Float>>       batteryTemperatureSetter;
+    private Consumer<Info<Float>>       heaterTemperatureSetter;
+    private Consumer<Info<Float>>       ambientTemperatureSetter;
+    private Consumer<Info<OutbackData>> outbackSetter;
+    private Consumer<Info<Float>>       outsideTemperatureSetter;
+    private Consumer<Info<Float>>       solarIrradianceSetter;
+
 
     public final ScheduledExecutor   scheduledExecutor;  // a single-threaded scheduled executor for all to use...
-    public final ExecutorService     executor;           // a single-threaded executor to do all blocking I/O on...
+    public final ExecutorService     executor;           // a double-threaded executor to do all blocking I/O on...
     public final Haps<Events>        haps;               // events...
 
-    private Logger                   LOGGER;
+    private final Logger             LOGGER;
     private ShedSolarMode            mode;
     private PostOffice               po;
     private ShedSolarActor           actor;
@@ -82,22 +86,15 @@ public class ShedSolar {
         scheduledExecutor = new ScheduledExecutor( false );
 
         // set up an executor service for all to use, in a non-daemon thread...
-        executor = Executors.newSingleThreadExecutor( _runnable -> {
-            Thread thread = Executors.defaultThreadFactory().newThread( _runnable );
-            thread.setDaemon( false );
-            thread.setName( "Executor" );
-            return thread;
-        });
+        executor = new ExecutorService( 2, 10 );
 
         // set up our info publishers...
-        batteryTemperatureBox = new InfoViewerBox<>();
-        batteryTemperature    = new ProxyInfoView<>( batteryTemperatureBox );
-        heaterTemperatureBox  = new InfoViewerBox<>();
-        heaterTemperature     = new ProxyInfoView<>( heaterTemperatureBox );
-        ambientTemperatureBox = new InfoViewerBox<>();
-        ambientTemperature    = new ProxyInfoView<>( ambientTemperatureBox );
-        outbackBox            = new InfoViewerBox<>();
-        outback               = new ProxyInfoView<>( outbackBox );
+        batteryTemperature   = new InfoView<>( (setter) -> batteryTemperatureSetter = setter );
+        heaterTemperature    = new InfoView<>( (setter) -> heaterTemperatureSetter = setter );
+        ambientTemperature   = new InfoView<>( (setter) -> ambientTemperatureSetter = setter );
+        outback              = new InfoView<>( (setter) -> outbackSetter = setter );
+        solarIrradiance      = new InfoView<>( (setter) -> solarIrradianceSetter = setter );
+        outsideTemperature   = new InfoView<>( (setter) -> outsideTemperatureSetter = setter );
 
         // start up our haps (events), using our "global" scheduled executor...
         haps = new Haps<>( HAPS_QUEUE_SIZE, scheduledExecutor, Events.INTERNET_DOWN );
@@ -203,7 +200,7 @@ public class ShedSolar {
 //
             // set up our Outback interrogator...
             outbacker = new Outbacker( config.outbacker );
-            outbackBox.set( outbacker.outback );
+            outbackSetter.accept( outbacker.outback );
 //
 //            // set up our production/dormancy discriminator...
 //            productionDetector = new ProductionDetector( config.productionDetector );
@@ -213,9 +210,9 @@ public class ShedSolar {
 
             // set up the temperature reader...
             tempReader = new TempReader( config.tempReader );
-            batteryTemperatureBox.set( tempReader.batteryTemperature );
-            heaterTemperatureBox.set ( tempReader.heaterTemperature  );
-            ambientTemperatureBox.set( tempReader.ambientTemperature );
+            batteryTemperatureSetter.accept( tempReader.batteryTemperature );
+            heaterTemperatureSetter.accept( tempReader.heaterTemperature );
+            ambientTemperatureSetter.accept( tempReader.ambientTemperature );
 
         }
 
@@ -272,6 +269,8 @@ public class ShedSolar {
 
                     // yup, so start our actor and get out of here...
                     actor = new ShedSolarActor( po );
+                    solarIrradianceSetter.accept( actor.solarIrradiance );
+                    outsideTemperatureSetter.accept( actor.outsideTemperature );
                     LOGGER.info( "Connected to CPO" );
                     return;
                 }

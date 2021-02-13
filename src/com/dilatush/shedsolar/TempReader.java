@@ -2,9 +2,7 @@ package com.dilatush.shedsolar;
 
 import com.dilatush.util.AConfig;
 import com.dilatush.util.info.Info;
-import com.dilatush.util.info.InfoBox;
 import com.dilatush.util.info.InfoView;
-import com.dilatush.util.info.InfoViewer;
 import com.dilatush.util.noisefilter.ErrorCalc;
 import com.dilatush.util.noisefilter.NoiseFilter;
 import com.dilatush.util.noisefilter.Sample;
@@ -20,6 +18,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.ScheduledFuture;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -47,18 +46,18 @@ public class TempReader {
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
     // the information this class publishes...
-    public final InfoViewer<TempSensorStatus>     batteryTemperatureSensorStatus;
-    public final InfoViewer<Float>                batteryTemperature;
-    public final InfoViewer<TempSensorStatus>     heaterTemperatureSensorStatus;
-    public final InfoViewer<Float>                heaterTemperature;
-    public final InfoViewer<Float>                ambientTemperature;
+    public final Info<TempSensorStatus>     batteryTemperatureSensorStatus;
+    public final Info<Float>                batteryTemperature;
+    public final Info<TempSensorStatus>     heaterTemperatureSensorStatus;
+    public final Info<Float>                heaterTemperature;
+    public final Info<Float>                ambientTemperature;
 
-    // the infoboxes for the published information...
-    private final InfoBox<TempSensorStatus>        batteryTemperatureSensorStatusBox;
-    private final InfoBox<Float>                   batteryTemperatureBox;
-    private final InfoBox<TempSensorStatus>        heaterTemperatureSensorStatusBox;
-    private final InfoBox<Float>                   heaterTemperatureBox;
-    private final InfoBox<Float>                   ambientTemperatureBox;
+    // the setters for the published information...
+    private Consumer<TempSensorStatus> batteryTemperatureSensorStatusSetter;
+    private Consumer<Float>            batteryTemperatureSetter;
+    private Consumer<TempSensorStatus> heaterTemperatureSensorStatusSetter;
+    private Consumer<Float>            heaterTemperatureSetter;
+    private Consumer<Float>            ambientTemperatureSetter;
 
     // These values are derived from the MAX31855 specification...
     private final static int THERMOCOUPLE_MASK    = 0xFFFC0000;
@@ -106,20 +105,13 @@ public class TempReader {
         config = _config;
 
         // set up our information publishing...
-        batteryTemperatureSensorStatusBox = new InfoBox<>();
-        batteryTemperatureSensorStatus = new InfoView<>( batteryTemperatureSensorStatusBox );
-        batteryTemperatureSensorStatusBox.set( new Info<>( new TempSensorStatus( false, false, false, false, false ) ) );
-        batteryTemperatureBox = new InfoBox<>();
-        batteryTemperature = new InfoView<>( batteryTemperatureBox );
-        
-        heaterTemperatureSensorStatusBox = new InfoBox<>();
-        heaterTemperatureSensorStatus = new InfoView<>( heaterTemperatureSensorStatusBox );
-        heaterTemperatureSensorStatusBox.set( new Info<>( new TempSensorStatus( false, false, false, false, false ) ) );
-        heaterTemperatureBox = new InfoBox<>();
-        heaterTemperature = new InfoView<>( heaterTemperatureBox );
-        
-        ambientTemperatureBox = new InfoBox<>();
-        ambientTemperature = new InfoView<>( ambientTemperatureBox );
+        batteryTemperature             = new InfoView<>( (setter) -> batteryTemperatureSetter             = setter, false );
+        batteryTemperatureSensorStatus = new InfoView<>( (setter) -> batteryTemperatureSensorStatusSetter = setter, false );
+        heaterTemperature              = new InfoView<>( (setter) -> heaterTemperatureSetter              = setter, false );
+        heaterTemperatureSensorStatus  = new InfoView<>( (setter) -> heaterTemperatureSensorStatusSetter  = setter, false );
+        ambientTemperature             = new InfoView<>( (setter) -> ambientTemperatureSetter             = setter, false );
+        batteryTemperatureSensorStatusSetter.accept( new TempSensorStatus() );
+        heaterTemperatureSensorStatusSetter .accept( new TempSensorStatus() );
 
         // get our SPI devices...
         batteryTempSPI = SpiFactory.getInstance( SpiChannel.CS0, SpiDevice.DEFAULT_SPI_SPEED, SpiMode.MODE_1 );
@@ -147,27 +139,27 @@ public class TempReader {
 
             // handle the battery reading
             int rawBattery = readThermocoupleTemperature(
-                    "Battery", batteryTempSPI, batteryTemperatureSensorStatusBox, batteryTemperatureBox,
+                    "Battery", batteryTempSPI, batteryTemperatureSensorStatusSetter, batteryTemperatureSensorStatus, batteryTemperatureSetter,
                     BATTERY_TEMPERATURE_SENSOR_UP, BATTERY_TEMPERATURE_SENSOR_DOWN, batteryFilter, batteryRawTE );
 
             // handle the heater reading
             int rawHeater = readThermocoupleTemperature(
-                    "Heater", heaterTempSPI, heaterTemperatureSensorStatusBox, heaterTemperatureBox,
+                    "Heater", heaterTempSPI, heaterTemperatureSensorStatusSetter, heaterTemperatureSensorStatus, heaterTemperatureSetter,
                     HEATER_TEMPERATURE_SENSOR_UP, HEATER_TEMPERATURE_SENSOR_DOWN, heaterFilter, heaterRawTE );
 
             /*
              * Now handle the ambient temperature.  Both chips supply it; we use the battery temperature chip if it's got a good reading,
              * the heater temperature chip otherwise.  If neither is available, we simply don't report ambient temperature.
              */
-            if( batteryTemperatureBox.get().isAvailable() )
-                ambientTemperatureBox.set( new Info<>( ((rawBattery & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f ) );
-            else if( heaterTemperatureBox.get().isAvailable() )
-                ambientTemperatureBox.set( new Info<>( ((rawHeater  & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f ) );
+            if( batteryTemperature.isInfoAvailable() )
+                ambientTemperatureSetter.accept( ((rawBattery & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f );
+            else if( heaterTemperature.isInfoAvailable() )
+                ambientTemperatureSetter.accept( ((rawHeater  & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f );
             else
-                ambientTemperatureBox.set( new Info<>( null ) );
+                ambientTemperatureSetter.accept( null );
 
             // switch the interval to the normal interval if we've started to get data...
-            if( batteryTemperatureBox.get().isAvailable() && heaterTemperatureBox.get().isAvailable() && (canceller != null) ) {
+            if( batteryTemperature.isInfoAvailable() && heaterTemperature.isInfoAvailable() && (canceller != null) ) {
                 canceller.cancel( false );
                 canceller = null;
                 ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate( this::tempTask, Duration.ZERO, config.normalInterval );
@@ -186,17 +178,18 @@ public class TempReader {
      *
      * @param _name The name of the thermocouple being measured.
      * @param _device The SPI bus device being used to make the measurement.
-     * @param _statusBox The InfoBox containing the sensor status.
-     * @param _tempBox The InfoBox containing the temperature measurement.
+     * @param _statusSetter The setter for the sensor status.
+     * @param _sensorStatus The sensor status Info instance.
+     * @param _tempSetter The setter for the temperature measurement.
      * @param _up The Hap to send if the sensor goes from down to up.
      * @param _down The Hap to send if the sensor goes from up to down.
      * @param _filter The NoiseFilter for this sensor.
      * @param _testEnabler The test enabler for this sensor.
      * @return The raw value from the sensor.
      */
-    private int readThermocoupleTemperature( final String _name, final SpiDevice _device, final InfoBox<TempSensorStatus> _statusBox,
-                                             final InfoBox<Float> _tempBox, final Events _up, final Events _down, final NoiseFilter _filter,
-                                             final TestEnabler _testEnabler ) {
+    private int readThermocoupleTemperature( final String _name, final SpiDevice _device, final Consumer<TempSensorStatus> _statusSetter,
+                                             final Info<TempSensorStatus> _sensorStatus, final Consumer<Float> _tempSetter, final Events _up,
+                                             final Events _down, final NoiseFilter _filter, final TestEnabler _testEnabler ) {
 
         // first get the raw reading...
         int rawTemp = getRaw( _device, _name );
@@ -206,7 +199,7 @@ public class TempReader {
             rawTemp |= _testEnabler.getAsInt( "mask" );
 
         // get the previous status...
-        TempSensorStatus oldStatus = _statusBox.get().info;
+        TempSensorStatus oldStatus = _sensorStatus.getInfo();
 
         // get the current status...
         TempSensorStatus newStatus = new TempSensorStatus(
@@ -223,7 +216,7 @@ public class TempReader {
 
         // if our status has changed, update the published info...
         if( newStatus.changed( oldStatus ) )
-            _statusBox.set( new Info<>( newStatus ) );
+            _statusSetter.accept( newStatus );
 
         // if the sensor is working, get our data...
         if( !newStatus.sensorProblem ) {
@@ -235,12 +228,12 @@ public class TempReader {
 
             // if we can, get a temperature sample and publish it...
             Sample sample = _filter.getFilteredAt( Instant.now() );
-            _tempBox.set( new Info<>( (sample == null) ? null : sample.value ) );
+            _tempSetter.accept( (sample == null) ? null : sample.value );
         }
 
         // otherwise, store invalid data...
         else {
-            _tempBox.set( new Info<>( null ) );
+            _tempSetter.accept( null );
         }
 
         return rawTemp;
@@ -372,6 +365,18 @@ public class TempReader {
             open = _open;
             shortToVCC = _shortToVCC;
             shortToGnd = _shortToGnd;
+        }
+
+
+        /**
+         * Create a new instance of this class with all fields set to {@code false}.
+         */
+        public TempSensorStatus() {
+            sensorProblem = false;
+            ioError = false;
+            open = false;
+            shortToVCC = false;
+            shortToGnd = false;
         }
 
 
