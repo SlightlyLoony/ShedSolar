@@ -10,7 +10,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import static com.dilatush.shedsolar.TemperatureMode.PRODUCTION;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
@@ -45,7 +44,6 @@ public class HeaterControl {
     private final long                 maxOpenLoopHeaterRunTime;
 
     // the following mutable variables are accessed both from the events thread and the scheduled thread...
-    private volatile TemperatureMode  mode;
     private volatile float            heaterTemperature;
     private volatile boolean          heaterTemperatureGood;
     private volatile float            batteryTemperature;
@@ -90,7 +88,6 @@ public class HeaterControl {
         heaterSSR.setShutdownOptions(      true, PinState.HIGH );
 
         // we start out our state machine by assuming that we're in production mode with the heater off...
-        mode  = PRODUCTION;
         range = productionRange;
 
         // subscribe to the events we want to monitor...

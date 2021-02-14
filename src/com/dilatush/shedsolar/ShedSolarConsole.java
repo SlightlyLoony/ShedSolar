@@ -80,6 +80,7 @@ public class ShedSolarConsole extends CommandProcessorConsoleProvider {
             if( shedSolar.solarIrradiance.isInfoAvailable() )
                 writeLine( String.format( "Solar Irradiance: %1$.0f watts/sq. meter", shedSolar.solarIrradiance.getInfo() ) );
             writeLine( "Outside Temperature: " + getTemp( shedSolar.outsideTemperature.getInfoSource() ) );
+            writeLine( "Production Mode: " + shedSolar.productionMode.getInfo().toString() );
         }
     }
 }

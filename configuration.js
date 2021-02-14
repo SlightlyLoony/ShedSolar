@@ -166,17 +166,17 @@ function init( config ) {
     // the range [-180..180].  There is no default value.
     config.productionDetector.lon = -111.839533;
 
-    // The pyrometer reading (in watts/square meter) threshold.  Values above the specified value indicate enough light for solar production.
-    // The value must be in the range [0..1200]; the default value is 80.
-    config.productionDetector.interval = 60000;
-
-    // The solar panel voltage threshold.  Values above the specified value indicate enough light for solar production.  The value must be in
-    // the range [0..300]; the default value is 225.
-    config.productionDetector.pyrometerThreshold = 80;
-
     // The interval (in milliseconds) that the production detector operates on; the "ticks" of its clock.  The value must be in the
     // range [10,000..600,000]; the default value is 60,000 (one minute).
-    config.productionDetector.panelThreshold = 150;
+    config.productionDetector.interval = 60000;
+
+    // The pyrometer reading (in watts/square meter) threshold.  Values above the specified value indicate enough light for solar production.
+    // The value must be in the range [0..1200]; the default value is 80.
+    config.productionDetector.pyrometerThreshold = 200;
+
+    // The solar panel power threshold.  Values above the specified value indicate enough light for solar production.  The value must be in
+    // the range [0..10000]; the default value is 200.
+    config.productionDetector.panelThreshold = 200;
 
     // The delay before switching from dormant to production mode, when adequate brightness has been detected, in "ticks" (see interval).  The
     // idea behind this delay is to avoid jumping to production mode if there's only a brief burst of light, like a hole in the clouds.  The

@@ -38,20 +38,22 @@ public class ShedSolar {
     private static final int  HAPS_QUEUE_SIZE = 100;
 
     // our public info...
-    public final Info<Float>         batteryTemperature;
-    public final Info<Float>         heaterTemperature;
-    public final Info<Float>         ambientTemperature;
-    public final Info<OutbackData>   outback;
-    public final Info<Float>         outsideTemperature;
-    public final Info<Float>         solarIrradiance;
+    public final Info<Float>                   batteryTemperature;
+    public final Info<Float>                   heaterTemperature;
+    public final Info<Float>                   ambientTemperature;
+    public final Info<OutbackData>             outback;
+    public final Info<Float>                   outsideTemperature;
+    public final Info<Float>                   solarIrradiance;
+    public final Info<ProductionDetector.Mode> productionMode;
 
     // and our setters...
-    private Consumer<Info<Float>>       batteryTemperatureSetter;
-    private Consumer<Info<Float>>       heaterTemperatureSetter;
-    private Consumer<Info<Float>>       ambientTemperatureSetter;
-    private Consumer<Info<OutbackData>> outbackSetter;
-    private Consumer<Info<Float>>       outsideTemperatureSetter;
-    private Consumer<Info<Float>>       solarIrradianceSetter;
+    private Consumer<Info<Float>>                   batteryTemperatureSetter;
+    private Consumer<Info<Float>>                   heaterTemperatureSetter;
+    private Consumer<Info<Float>>                   ambientTemperatureSetter;
+    private Consumer<Info<OutbackData>>             outbackSetter;
+    private Consumer<Info<Float>>                   outsideTemperatureSetter;
+    private Consumer<Info<Float>>                   solarIrradianceSetter;
+    private Consumer<Info<ProductionDetector.Mode>> productionModeSetter;
 
 
     public final ScheduledExecutor   scheduledExecutor;  // a single-threaded scheduled executor for all to use...
@@ -90,11 +92,12 @@ public class ShedSolar {
 
         // set up our info publishers...
         batteryTemperature   = new InfoView<>( (setter) -> batteryTemperatureSetter = setter );
-        heaterTemperature    = new InfoView<>( (setter) -> heaterTemperatureSetter = setter );
+        heaterTemperature    = new InfoView<>( (setter) -> heaterTemperatureSetter  = setter );
         ambientTemperature   = new InfoView<>( (setter) -> ambientTemperatureSetter = setter );
-        outback              = new InfoView<>( (setter) -> outbackSetter = setter );
-        solarIrradiance      = new InfoView<>( (setter) -> solarIrradianceSetter = setter );
+        outback              = new InfoView<>( (setter) -> outbackSetter            = setter );
+        solarIrradiance      = new InfoView<>( (setter) -> solarIrradianceSetter    = setter );
         outsideTemperature   = new InfoView<>( (setter) -> outsideTemperatureSetter = setter );
+        productionMode       = new InfoView<>( (setter) -> productionModeSetter     = setter );
 
         // start up our haps (events), using our "global" scheduled executor...
         haps = new Haps<>( HAPS_QUEUE_SIZE, scheduledExecutor, Events.INTERNET_DOWN );
@@ -201,9 +204,10 @@ public class ShedSolar {
             // set up our Outback interrogator...
             outbacker = new Outbacker( config.outbacker );
             outbackSetter.accept( outbacker.outback );
-//
-//            // set up our production/dormancy discriminator...
-//            productionDetector = new ProductionDetector( config.productionDetector );
+
+            // set up our production/dormancy discriminator...
+            productionDetector = new ProductionDetector( config.productionDetector );
+            productionModeSetter.accept( productionDetector.productionMode );
 //
 //            // set up our heater control...
 //            heaterControl = new HeaterControl( config.heaterControl );
