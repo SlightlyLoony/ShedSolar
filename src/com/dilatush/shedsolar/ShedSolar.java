@@ -195,9 +195,9 @@ public class ShedSolar {
 
         try {
 
-//            // set up our battery temperature LED...
-//            batteryTempLED = new BatteryTempLED( config.batteryTempLED );
-//
+            // set up our battery temperature LED...
+            batteryTempLED = new BatteryTempLED( config.batteryTempLED );
+
             // set up our Outback interrogator...
             outbacker = new Outbacker( config.outbacker );
             outbackSetter.accept( outbacker.outback );

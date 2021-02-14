@@ -5,10 +5,9 @@ import com.pi4j.io.gpio.GpioPinDigitalOutput;
 import com.pi4j.io.gpio.PinState;
 import com.pi4j.io.gpio.RaspiPin;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.logging.Logger;
-
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
  * <p>Controls the battery temperature LED.</p>
@@ -24,17 +23,12 @@ public class BatteryTempLED {
     @SuppressWarnings( "unused" )
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
+    private final ShedSolar            shedSolar;
     private final float                minTemp;
     private final float                maxTemp;
     private final long                 normalInterval;
     private final long                 errorInterval;
     private final GpioPinDigitalOutput led;
-
-    private boolean                    started;
-
-    // these are set on the events thread, read on the timer thread...
-    private volatile float   batteryTemp;
-    private volatile boolean goodBatteryTemp;
 
 
     /**
@@ -44,21 +38,65 @@ public class BatteryTempLED {
      */
     public BatteryTempLED( final Config _config ) {
 
+        // get our lord and master...
+        shedSolar      = ShedSolar.instance;
+
         // get our configuration...
         minTemp        = _config.minTemp;
         maxTemp        = _config.maxTemp;
         normalInterval = _config.normalInterval;
         errorInterval  = _config.errorInterval;
 
-        batteryTemp = 0;
-        started = false;
-
         // set up our GPIO pin...
         led = ShedSolar.instance.getGPIO().provisionDigitalOutputPin( RaspiPin.GPIO_02, "Battery Temperature", PinState.HIGH );
         led.setShutdownOptions( true, PinState.HIGH );
 
-        // subscribe to battery temperature readings...
-// TODO        subscribeToEvent( event -> handleBatteryTempEvent( (BatteryTemperature) event ), BatteryTemperature.class );
+        // start things up by directly running the "on" event handler...
+        on();
+    }
+
+
+    /**
+     * LED "on" event, run by the constructor to start things up, otherwise by schedules set in this method.
+     */
+    private void on() {
+
+        // turn the LED on (it's connected from the output pin through a load resistor to Vcc)...
+        led.setState( PinState.LOW );
+
+        // decide what to do based on whether we have a battery temperature reading available...
+        // if we have temperature data, then flash the LED so its duty cycle reflects the temperature
+        if( shedSolar.batteryTemperature.isInfoAvailable() ) {
+
+            // read the temperature and figure out how long we want to keep the LED on...
+            float batteryTemp = shedSolar.batteryTemperature.getInfo();
+            long onMS =  // how many milliseconds to keep the LED on...
+                    (batteryTemp <= minTemp )
+                    ? 0
+                    : (batteryTemp >= maxTemp)
+                      ? normalInterval
+                      : Math.round( normalInterval * ((batteryTemp - minTemp) / (maxTemp - minTemp)) );
+
+            // schedule our next off and on events...
+            shedSolar.scheduledExecutor.schedule( this::off, Duration.ofMillis( onMS           ) );
+            shedSolar.scheduledExecutor.schedule( this::on,  Duration.ofMillis( normalInterval ) );
+        }
+
+        // otherwise, we're going to fast blink and possibly get someone's attention...
+        else {
+            shedSolar.scheduledExecutor.schedule( this::off, Duration.ofMillis( errorInterval / 2 ) );
+            shedSolar.scheduledExecutor.schedule( this::on,  Duration.ofMillis( errorInterval     ) );
+        }
+    }
+
+
+    /**
+     * LED "off" event, run on a schedule set in {@link #on()}.
+     */
+    private void off() {
+
+        // turn off the LED (it's connected from the output pin through a load resistor to Vcc)...
+        led.setState( PinState.HIGH );
     }
 
 
@@ -109,65 +147,6 @@ public class BatteryTempLED {
                     "Battery Temperature LED error interval is out of range: " + errorInterval );
             validate( () -> errorInterval * 2 <  normalInterval, _messages,
                     "Battery Temperature LED error interval more than half the normal interval: " + errorInterval );
-        }
-    }
-
-
-//    /**
-//     * Handle the battery temperature event that the constructor subscribed us to.
-//     *
-//     * @param _event the battery temperature event
-//     */
-//    public void handleBatteryTempEvent( final BatteryTemperature _event ) {
-//
-//        // record our latest battery temperature information...
-//        goodBatteryTemp = _event.goodMeasurement;
-//        batteryTemp = _event.degreesC;
-//
-//        // if we haven't yet started the LED flashing, do so now...
-//        if( !started ) {
-//            started = true;
-//            new On().run();
-//        }
-//    }
-
-
-    /**
-     * Computes the duration (in milliseconds) for the "on" portion of the battery temperature LED when there is a valid temperature reading.
-     *
-     * @param _temp the battery temperature in degrees Celcius
-     * @return the "on" duration in milliseconds
-     */
-    private long onMS( final float _temp ) {
-        if( _temp <= minTemp ) return 0;
-        if( _temp >= maxTemp ) return normalInterval;
-        return Math.round( normalInterval * ((_temp - minTemp) / (maxTemp - minTemp)) );
-    }
-
-
-    private class On implements Runnable {
-
-        @Override
-        public void run() {
-            led.setState( PinState.LOW );
-
-            if( goodBatteryTemp ) {
-                ShedSolar.instance.scheduledExecutor.schedule( new Off(), onMS( batteryTemp ), MILLISECONDS );
-                ShedSolar.instance.scheduledExecutor.schedule( new On(), normalInterval, MILLISECONDS );
-            }
-            else {
-                ShedSolar.instance.scheduledExecutor.schedule( new Off(), errorInterval / 2, MILLISECONDS );
-                ShedSolar.instance.scheduledExecutor.schedule( new On(), errorInterval, MILLISECONDS );
-            }
-        }
-    }
-
-
-    private class Off  implements Runnable {
-
-        @Override
-        public void run() {
-            led.setState( PinState.HIGH );
         }
     }
 }
