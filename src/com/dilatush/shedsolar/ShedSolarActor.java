@@ -31,7 +31,7 @@ public class ShedSolarActor extends Actor {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
-    private static final long MAX_WEATHER_REPORT_DELAY = 90000;
+    private static final long MAX_WEATHER_REPORT_DELAY = 150000;
 
     private static final String mailboxName = "main";
 

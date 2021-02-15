@@ -32,7 +32,7 @@ public class Config extends AConfig {
     public TempReader.Config           tempReader         = new TempReader.Config();
     public BatteryTempLED.Config       batteryTempLED     = new BatteryTempLED.Config();
     public Outbacker.Config            outbacker          = new Outbacker.Config();
-    public ProductionDetector.Config   productionDetector = new ProductionDetector.Config();
+    public LightDetector.Config        lightDetector      = new LightDetector.Config();
     public HeaterControl.Config        heaterControl      = new HeaterControl.Config();
     public TestManager.Config          testManager        = new TestManager.Config();
     public ConsoleServer.Config        consoleServer      = new ConsoleServer.Config();
@@ -51,7 +51,7 @@ public class Config extends AConfig {
         cpo                .verify( _messages );
         batteryTempLED     .verify( _messages );
         outbacker          .verify( _messages );
-        productionDetector .verify( _messages );
+        lightDetector      .verify( _messages );
         heaterControl      .verify( _messages );
         testManager        .verify( _messages );
         consoleServer      .verify( _messages );

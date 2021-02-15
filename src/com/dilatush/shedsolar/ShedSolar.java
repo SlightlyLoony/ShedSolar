@@ -44,7 +44,7 @@ public class ShedSolar {
     public final Info<OutbackData>             outback;
     public final Info<Float>                   outsideTemperature;
     public final Info<Float>                   solarIrradiance;
-    public final Info<ProductionDetector.Mode> productionMode;
+    public final Info<LightDetector.Mode>      light;
 
     // and our setters...
     private Consumer<Info<Float>>                   batteryTemperatureSetter;
@@ -53,7 +53,7 @@ public class ShedSolar {
     private Consumer<Info<OutbackData>>             outbackSetter;
     private Consumer<Info<Float>>                   outsideTemperatureSetter;
     private Consumer<Info<Float>>                   solarIrradianceSetter;
-    private Consumer<Info<ProductionDetector.Mode>> productionModeSetter;
+    private Consumer<Info<LightDetector.Mode>>      lightSetter;
 
 
     public final ScheduledExecutor   scheduledExecutor;  // a single-threaded scheduled executor for all to use...
@@ -68,7 +68,7 @@ public class ShedSolar {
 
     private BatteryTempLED           batteryTempLED;
     private Outbacker                outbacker;
-    private ProductionDetector       productionDetector;
+    private LightDetector            lightDetector;
     private HeaterControl            heaterControl;
     private TempReader               tempReader;
     private ConsoleServer            consoleServer;
@@ -97,7 +97,7 @@ public class ShedSolar {
         outback              = new InfoView<>( (setter) -> outbackSetter            = setter );
         solarIrradiance      = new InfoView<>( (setter) -> solarIrradianceSetter    = setter );
         outsideTemperature   = new InfoView<>( (setter) -> outsideTemperatureSetter = setter );
-        productionMode       = new InfoView<>( (setter) -> productionModeSetter     = setter );
+        light                = new InfoView<>( (setter) -> lightSetter              = setter );
 
         // start up our haps (events), using our "global" scheduled executor...
         haps = new Haps<>( HAPS_QUEUE_SIZE, scheduledExecutor, Events.INTERNET_DOWN );
@@ -206,8 +206,8 @@ public class ShedSolar {
             outbackSetter.accept( outbacker.outback );
 
             // set up our production/dormancy discriminator...
-            productionDetector = new ProductionDetector( config.productionDetector );
-            productionModeSetter.accept( productionDetector.productionMode );
+            lightDetector = new LightDetector( config.lightDetector );
+            lightSetter.accept( lightDetector.light );
 //
 //            // set up our heater control...
 //            heaterControl = new HeaterControl( config.heaterControl );
