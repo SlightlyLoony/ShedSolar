@@ -197,6 +197,48 @@ function init( config ) {
     // milliseconds, and the default value is 5,000 milliseconds (five seconds).
     config.heaterControl.tickTime = 5000;  // 5 seconds
 
+    // The lowest battery temperature (in degrees Celcius) allowed when in dark mode.  This value must be in the range [-10..25], and it must
+    // be less than darkHighTemp and less than lightLowTemp.  Its default value is 0C.
+    config.heaterControl.darkLowTemp = 0;
+
+    // The highest battery temperature (in degrees Celcius) allowed when in dark mode.  This value must be in the range [-10..25], and it must
+    // be greater than darkLowTemp and less than lightHighTemp.  Its default value is 5C.
+    config.heaterControl.darkHighTemp = 5;
+
+    // The lowest battery temperature (in degrees Celcius) allowed when in light mode.  This value must be in the range [0..40], and it must
+    // be less than lightHighTemp and greater than darkLowTemp.  Its default value is 25C.
+    config.heaterControl.lightLowTemp = 25;
+
+    // The highest battery temperature (in degrees Celcius) allowed when in light mode.  This value must be in the range [0..40], and it must
+    // be greater than lightLowTemp and greater than darkHighTemp.  It's default value is 30C.
+    config.heaterControl.lightHighTemp = 30;
+
+
+
+
+    // This value defines the amount of change in the temperature (in degrees Celcius) measured by the thermocouple in the heater's air output
+    // must be seen to verify that the heater has successfully turned on or off.  This value must be in the range [1..40] degrees Celcius, and
+    // its default value is 10 degrees Celcius.
+    config.heaterControl.heaterTempChangeSenseThreshold = 10.0;
+
+    // This value defines the amount of change in the temperature (in degrees Celcius) measured by the thermocouple under the batteries
+    // must be seen to verify that the batteries are being heated or cooled.  This value must be in the range [0.25..10] degrees Celcius, and
+    // its default value is 2.5 degrees Celcius.
+    config.heaterControl.batteryTempChangeSenseThreshold = 2.5;
+
+    // This value defines the maximum temperature (in degrees Celcius) allowed in the heater's air output.  If this temperature is exceeded, the
+    // heater will be shut down even if the batteries' temperature is too low.  This is a safety feature in case the heater's internal
+    // overtemperature "breaker" fails.  The heater will be restarted after a cooldown period.  This value must be in the range [30..75] degrees
+    // Celcius, and its default value is 50C.
+    config.heaterControl.maxHeaterTemperature = 50;
+
+    // This value determines how many times to attempt starting the heater before assuming it has actually failed.  The heater has an
+    // overtemperature "breaker" that can prevent it from starting if the internal temperature of the heater is too high.  To handle this, if
+    // we try and fail to start the heater, then we wait for a while (see heaterCooldownTime) to let the heater cool down and try again.
+    // This value must be in the range [1..10], and its default value is 4.
+    config.heaterControl.maxHeaterStartAttempts = 4;
+
+
     // The heater thermocouple measures the temperature of the air blowing out of the heater.  When turning the heater on, the temperature is
     // measured just before turning it on, and then the heater's operation is verified when the temperature increases by at least
     // heaterTempChangeSenseThreshold degrees C.  This value determines the maximum time (in milliseconds) to wait for that
@@ -225,45 +267,6 @@ function init( config ) {
     // milliseconds.  Its value must be in the range [60,000..600,000] milliseconds (one minute to ten minutes); the default value is 300,000
     // milliseconds (five minutes).
     config.heaterControl.maxOpenLoopHeaterRunTime = 300000;  // 5 minutes...
-
-    // The lowest battery temperature (in degrees Celcius) allowed when in dormant mode.  This value must be in the range [-10..25], and it must
-    // be less than dormantHighTemp and less than productionLowTemp.  Its default value is 0C.
-    config.heaterControl.dormantLowTemp = 0;
-
-    // The highest battery temperature (in degrees Celcius) allowed when in dormant mode.  This value must be in the range [-10..25], and it must
-    // be greater than dormantLowTemp and less than productionHighTemp.  Its default value is 5C.
-    config.heaterControl.dormantHighTemp = 5;
-
-    // The lowest battery temperature (in degrees Celcius) allowed when in production mode.  This value must be in the range [0..40], and it must
-    // be less than productionHighTemp and greater than dormantLowTemp.  Its default value is 25C.
-    config.heaterControl.productionLowTemp = 25;
-
-    // The highest battery temperature (in degrees Celcius) allowed when in production mode.  This value must be in the range [0..40], and it must
-    // be greater than productionLowTemp and greater than dormantHighTemp.  It's default value is 30C.
-    config.heaterControl.productionHighTemp = 30;
-
-    // This value defines the amount of change in the temperature (in degrees Celcius) measured by the thermocouple in the heater's air output
-    // must be seen to verify that the heater has successfully turned on or off.  This value must be in the range [1..40] degrees Celcius, and
-    // its default value is 10 degrees Celcius.
-    config.heaterControl.heaterTempChangeSenseThreshold = 10.0;
-
-    // This value defines the amount of change in the temperature (in degrees Celcius) measured by the thermocouple under the batteries
-    // must be seen to verify that the batteries are being heated or cooled.  This value must be in the range [0.25..10] degrees Celcius, and
-    // its default value is 2.5 degrees Celcius.
-    config.heaterControl.batteryTempChangeSenseThreshold = 2.5;
-
-    // This value defines the maximum temperature (in degrees Celcius) allowed in the heater's air output.  If this temperature is exceeded, the
-    // heater will be shut down even if the batteries' temperature is too low.  This is a safety feature in case the heater's internal
-    // overtemperature "breaker" fails.  The heater will be restarted after a cooldown period.  This value must be in the range [30..75] degrees
-    // Celcius, and its default value is 50C.
-    config.heaterControl.maxHeaterTemperature = 50;
-
-    // This value determines how many times to attempt starting the heater before assuming it has actually failed.  The heater has an
-    // overtemperature "breaker" that can prevent it from starting if the internal temperature of the heater is too high.  To handle this, if
-    // we try and fail to start the heater, then we wait for a while (see heaterCooldownTime) to let the heater cool down and try again.
-    // This value must be in the range [1..10], and its default value is 4.
-    config.heaterControl.maxHeaterStartAttempts = 4;
-
 
     /*
      * Console server configuration...

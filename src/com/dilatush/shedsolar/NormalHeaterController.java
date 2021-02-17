@@ -5,7 +5,6 @@ import com.dilatush.util.fsm.FSM;
 import com.dilatush.util.fsm.FSMSpec;
 import com.dilatush.util.fsm.FSMState;
 import com.dilatush.util.fsm.FSMTransition;
-import com.dilatush.util.fsm.events.FSMEvent;
 
 import java.time.Duration;
 import java.util.List;
@@ -24,8 +23,8 @@ public class NormalHeaterController implements HeaterController {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
-    private final FSM<State,Event> fsm;
-    private final Config           config;
+    private final FSM<State,Event>  fsm;           // the finite state machine at the heart of this class...
+    private final Config            config;        // the configuration loaded from JavaScript...
 
     private float                   startingTemp;  // temperature going into confirming heater on or off..
     private HeaterControllerContext context;       // the controller context as of the most recent tick...
@@ -33,13 +32,15 @@ public class NormalHeaterController implements HeaterController {
     private int                     turnOnTries;   // number of times we've tried to turn the heater on...
 
 
+    // the states of our FSM...
     private enum State {
         OFF, CONFIRM_SSR_ON, HEATER_COOLING, CONFIRM_HEATER_ON, ON, CONFIRM_SSR_OFF, CONFIRM_HEATER_OFF, COOLING }
 
-
+    // the events that drive our FSM...
     private enum Event {
         LO_BATTERY_TEMP, ON_SENSED, NO_TEMP_RISE, COOLED, HEATER_TEMP_RISE, HI_BATTERY_TEMP,
         HI_HEATER_TEMP, OFF_SENSED, HEATER_TEMP_DROP, NO_TEMP_DROP, RESET }
+
 
     /**
      * Creates a new instance of this class with the given configuration.
@@ -88,28 +89,22 @@ public class NormalHeaterController implements HeaterController {
     }
 
 
-
-    // on any RESET event...
-    private void onEventReset( final FSMEvent<Event> _eventFSMEvent, final FSMState<State, Event> _stateEventFSMState ) {
-
-        // if we've got a context, turn off the SSR and the heater LED...
-        // if we didn't have a context, then they're already off...
-        if( context != null ) {
-            context.heaterSSR.high();
-            context.heaterPowerLED.high();
-        }
+    /**
+     * Called by {@link HeaterControl} to tell this heater controller to turn off the heater and heater LED, and return to initial state, ready for
+     * reuse.
+     */
+    @Override
+    public void reset() {
+        fsm.onEvent( Event.RESET );
     }
 
 
+    /*---------------------------*/
+    /*   F S M   A c t i o n s   */
+    /*---------------------------*/
+
     // on OFF:LOW_BATTERY_TEMP -> CONFIRM_SSR_ON...
     private void on_Off_LowBatteryTemp( final FSMTransition<State,Event> _transition ) {
-
-        // record our starting temperature (so we can sense the temperature rise)...
-        startingTemp = context.heaterTemp;
-
-        // turn on the heater and the heater LED...
-        context.heaterSSR.low();
-        context.heaterPowerLED.low();
 
         // number of times we've tried to zero...
         turnOnTries = 0;
@@ -166,6 +161,13 @@ public class NormalHeaterController implements HeaterController {
     // on entry to CONFIRM_SSR_ON...
     private void onEntry_ConfirmSSROn( final FSMState<State,Event> _state ) {
 
+        // record our starting temperature (so we can sense the temperature rise)...
+        startingTemp = context.heaterTemp;
+
+        // turn on the heater and the heater LED...
+        context.heaterSSR.low();
+        context.heaterPowerLED.low();
+
         // set a timeout for 100 ms to check sense relay...
         _state.fsm.scheduleEvent( Event.ON_SENSED, Duration.ofMillis( 100 ) );
     }
@@ -187,6 +189,19 @@ public class NormalHeaterController implements HeaterController {
     }
 
 
+
+    // on entry to OFF...
+    private void onEntry_Off( final FSMState<State,Event> _state ) {
+
+        // turn off the SSR and the heater LED (matters for reset event)...
+        // if we didn't have a context, then they're already off...
+        if( context != null ) {
+            context.heaterSSR.high();
+            context.heaterPowerLED.high();
+        }
+    }
+
+
     // on exit from ON...
     private void onExit_On( final FSMState<State,Event> _state ) {
 
@@ -200,15 +215,8 @@ public class NormalHeaterController implements HeaterController {
 
 
     /**
-     * Called by {@link HeaterControl} to tell this heater controller to turn off the heater and heater LED, and return to initial state, ready for
-     * reuse.
+     * The configuration for this class, normally from JavaScript.
      */
-    @Override
-    public void reset() {
-        fsm.onEvent( Event.RESET );
-    }
-
-
     public static class Config extends AConfig {
 
         // positive number
@@ -235,17 +243,21 @@ public class NormalHeaterController implements HeaterController {
     }
 
 
+    /**
+     * Create the FSM at the heart of this class.
+     *
+     * @return the FSM created
+     */
     private FSM<State,Event> createFSM() {
 
         FSMSpec<State,Event> spec = new FSMSpec<>( State.OFF, Event.COOLED );
 
         spec.enableEventScheduling( ShedSolar.instance.scheduledExecutor );
 
-        spec.setEventAction( Event.RESET, this::onEventReset );
-
         spec.setStateOnEntryAction( State.CONFIRM_SSR_ON,  this::onEntry_ConfirmSSROn  );
         spec.setStateOnEntryAction( State.CONFIRM_SSR_OFF, this::onEntry_ConfirmSSROff );
-        spec.setStateOnEntryAction( State.COOLING, this::onEntry_Cooling );
+        spec.setStateOnEntryAction( State.COOLING,         this::onEntry_Cooling       );
+        spec.setStateOnEntryAction( State.OFF,             this::onEntry_Off           );
 
         spec.setStateOnExitAction( State.ON, this::onExit_On );
 

@@ -78,10 +78,10 @@ public class HeaterControl {
         startedUp = false;
 
         // instantiate our controllers...
-        normalHeaterController      = new NormalHeaterController(      config.normalConfig      );
-        batteryOnlyHeaterController = new BatteryOnlyHeaterController( config.batteryOnlyConfig );
-        heaterOnlyHeaterController  = new HeaterOnlyHeaterController(  config.heaterOnlyConfig  );
-        noTempsHeaterController     = new NoTempsHeaterController(     config.noTempsConfig     );
+        normalHeaterController      = new NormalHeaterController(      config.normal );
+        batteryOnlyHeaterController = new BatteryOnlyHeaterController( config.batteryOnly );
+        heaterOnlyHeaterController  = new HeaterOnlyHeaterController(  config.heaterOnly );
+        noTempsHeaterController     = new NoTempsHeaterController(     config.noTemps );
 
         // start up our period tick...
         ShedSolar.instance.scheduledExecutor.scheduleWithFixedDelay( this::tick, Duration.ZERO, Duration.ofMillis( config.tickTime ) );
@@ -112,12 +112,14 @@ public class HeaterControl {
                 if( heaterController != null)
                     heaterController.reset();
                 heaterController = normalHeaterController;
+                LOGGER.info( "Heater control switched to normal heater controller" );
             }
         }
         else if( batteryTemp.isInfoAvailable() ) {
             if( !(heaterController instanceof BatteryOnlyHeaterController) ) {
                 if( heaterController != null)
                     heaterController.reset();
+                LOGGER.info( "Heater control switched to battery-temperature-only heater controller" );
                 heaterController = batteryOnlyHeaterController;
             }
         }
@@ -125,6 +127,7 @@ public class HeaterControl {
             if( !(heaterController instanceof HeaterOnlyHeaterController) ) {
                 if( heaterController != null)
                     heaterController.reset();
+                LOGGER.info( "Heater control switched to heater-temperature-only heater controller" );
                 heaterController = heaterOnlyHeaterController;
             }
         }
@@ -132,14 +135,15 @@ public class HeaterControl {
             if( !(heaterController instanceof NoTempsHeaterController) ) {
                 if( heaterController != null)
                     heaterController.reset();
+                LOGGER.info( "Heater control switched to no-temperature heater controller" );
                 heaterController = noTempsHeaterController;
             }
         }
 
         // figure out what range we should be using...
         Mode mode = shedSolar.light.getInfo();
-        float loTemp = (mode == LIGHT) ? config.productionLowTemp  : config.dormantLowTemp;
-        float hiTemp = (mode == LIGHT) ? config.productionHighTemp : config.dormantHighTemp;
+        float loTemp = (mode == LIGHT) ? config.lightLowTemp : config.darkLowTemp;
+        float hiTemp = (mode == LIGHT) ? config.lightHighTemp : config.darkHighTemp;
 
         // make our context and call our controller...
         HeaterControllerContext context = new HeaterControllerContext(
@@ -148,18 +152,37 @@ public class HeaterControl {
     }
 
 
+    /**
+     * The context for a tick.
+     */
     public static class HeaterControllerContext {
-
+        
+        /** The GPIO input pin, low when the mechanical "power sense" relay is energized by the SSR turning on. */
         public final GpioPinDigitalInput  ssrSense;
+        
+        /** The GPIO output pin that when low turns on the heater power LED. */
         public final GpioPinDigitalOutput heaterPowerLED;
+        
+        /** The GPIO output pin that when low turns on the heater power solid state relay (SSR). */
         public final GpioPinDigitalOutput heaterSSR;
-        public final float batteryTemp;
-        public final float heaterTemp;
-        public final float ambientTemp;
-        public final float loTemp;
-        public final float hiTemp;
+        
+        /** The battery temperature in degrees Celcius. */
+        public final float                batteryTemp;
+
+        /** The heater temperature in degrees Celcius. */
+        public final float                heaterTemp;
+
+        /** The ambient temperature in degrees Celcius. */
+        public final float                ambientTemp;
+
+        /** The lowest target battery temperature in degrees Celcius. */
+        public final float                loTemp;
+
+        /** The highest target battery temperature in degrees Celcius. */
+        public final float                hiTemp;
 
 
+        /** Create a new instance of this class. */
         private HeaterControllerContext( final GpioPinDigitalInput _ssrSense, final GpioPinDigitalOutput _heaterPowerLED,
                                         final GpioPinDigitalOutput _heaterSSR, final float _batteryTemp, final float _heaterTemp,
                                         final float _ambientTemp, final float _loTemp, final float _hiTemp ) {
@@ -178,161 +201,76 @@ public class HeaterControl {
     public static class Config extends AConfig {
 
         /**
-         * The lowest battery temperature (in degrees Celcius) allowed when in dormant mode.  This value must be in the range [-10..25], and it must
-         * be less than {@link #dormantHighTemp} and less than {@link #productionLowTemp}.  Its default value is 0C.
-         */
-        public float dormantLowTemp;
-
-        /**
-         * The highest battery temperature (in degrees Celcius) allowed when in dormant mode.  This value must be in the range [-10..25], and it must
-         * be greater than {@link #dormantLowTemp} and less than {@link #productionHighTemp}.  Its default value is 5C.
-         */
-        public float dormantHighTemp;
-
-        /**
-         * The lowest battery temperature (in degrees Celcius) allowed when in production mode.  This value must be in the range [0..40], and it must
-         * be less than {@link #productionHighTemp} and greater than {@link #dormantLowTemp}.  Its default value is 25C.
-         */
-        public float productionLowTemp;
-
-        /**
-         * The highest battery temperature (in degrees Celcius) allowed when in production mode.  This value must be in the range [0..40], and it must
-         * be greater than {@link #productionLowTemp} and greater than {@link #dormantHighTemp}.  It's default value is 30C.
-         */
-        public float productionHighTemp;
-
-        /**
-         * The heater thermocouple measures the temperature of the air blowing out of the heater.  When turning the heater on, the temperature is
-         * measured just before turning it on, and then the heater's operation is verified when the temperature increases by at least
-         * {@link #heaterTempChangeSenseThreshold} degrees C.  This value determines the maximum time (in milliseconds) to wait for that
-         * verification.  If the time is exceeded, the heater has failed to start.  Note that the heater failing to start isn't necessarily fatal,
-         * as it may simply be too hot and in need of a cooldown cycle.  This value must be in the range [0..600,000], and the default value is
-         * 150,000 (or two and a half minutes).
-         */
-        public long  maxHeaterOnVerifyTime;
-
-        /**
-         * The heater thermocouple measures the temperature of the air blowing out of the heater.  When turning the heater off, the temperature is
-         * measured just before turning it off, and then the heater's operation is verified when the temperature decreases by at least
-         * {@link #heaterTempChangeSenseThreshold} degrees C.  This value determines the maximum time (in milliseconds) to wait for that
-         * verification.  If the time is exceeded, the heater has failed to shut off.  This value must be in the range [0..600,000], and the default
-         * value is 180,000 (or three minutes).
-         */
-        public long  maxHeaterOffVerifyTime;
-
-        /**
-         * When the heater fails to turn on, a heater cooldown cycle is initiated for up to {@link #maxHeaterStartAttempts} times.  This value is
-         * multiplied by the retry attempt number to determine how long to wait (in milliseconds) for cooling down (with the heater off).  For
-         * example, if this value was set to 180,000 (for 3 minutes), then the cooldown period would be 3 minutes on the first heater start retry, 6
-         * minutes on the second retry, 9 minutes on the third retry, and so on.  This value must be in the range [60,000..600,000] milliseconds.
-         * The default value is 180,000.
-         */
-        public long  heaterCooldownTime;
-
-        /**
-         * This value determines how many times to attempt starting the heater before assuming it has actually failed.  The heater has an
-         * overtemperature "breaker" that can prevent it from starting if the internal temperature of the heater is too high.  To handle this, if
-         * we try and fail to start the heater, then we wait for a while (see {@link #heaterCooldownTime}) to let the heater cool down and try again.
-         * This value must be in the range [1..10], and its default value is 4.
-         */
-        public int   maxHeaterStartAttempts;
-
-        /**
-         * This value defines the amount of change in the temperature (in degrees Celcius) measured by the thermocouple in the heater's air output
-         * must be seen to verify that the heater has successfully turned on or off.  This value must be in the range [1..40] degrees Celcius, and
-         * its default value is 10 degrees Celcius.
-         */
-        public float heaterTempChangeSenseThreshold;
-
-        /**
-         * This value defines the amount of change in the temperature (in degrees Celcius) measured by the thermocouple under the batteries
-         * must be seen to verify that the batteries are being heated or cooled.  This value must be in the range [0.25..10] degrees Celcius, and
-         * its default value is 2.5 degrees Celcius.
-         */
-        public float batteryTempChangeSenseThreshold;
-
-        /**
-         * This value defines the maximum temperature (in degrees Celcius) allowed in the heater's air output.  If this temperature is exceeded, the
-         * heater will be shut down even if the batteries' temperature is too low.  This is a safety feature in case the heater's internal
-         * overtemperature "breaker" fails.  The heater will be restarted after a cooldown period.  This value must be in the range [30..75] degrees
-         * Celcius, and its default value is 50C.
-         */
-        public float maxHeaterTemperature;
-
-        /**
-         * If the battery temperature thermocouple fails, but we sense that the heater temperature is below the current low battery temperature
-         * threshold, then we assume that the batteries need to be heated and we turn the heater on.  However, because we can't sense the actual
-         * battery temperature we just run "open loop", leaving the heater on for a fixed amount of time.  This value determines that time, in
-         * milliseconds.  Its value must be in the range [60,000..600,000] milliseconds (one minute to ten minutes); the default value is 300,000
-         * milliseconds (five minutes).
-         */
-        public long  maxOpenLoopHeaterRunTime;
-
-        public NormalHeaterController.Config normalConfig;
-        public BatteryOnlyHeaterController.Config batteryOnlyConfig;
-        public HeaterOnlyHeaterController.Config heaterOnlyConfig;
-        public NoTempsHeaterController.Config noTempsConfig;
-
-        /**
          * The time (in milliseconds) between "ticks" of the heater control state machine.  This value must be in the range [1,000..15,000]
          * milliseconds, and the default value is 5,000 milliseconds (five seconds).
          */
         public long tickTime;
 
+        /**
+         * The lowest battery temperature (in degrees Celcius) allowed when in dark mode.  This value must be in the range [-10..25], and it must
+         * be less than {@link #darkHighTemp} and less than {@link #lightLowTemp}.  Its default value is 0C.
+         */
+        public float darkLowTemp = 0;
 
-        public Config() {
-            tickTime                        = 5000;    // 5 seconds...
-            maxHeaterOnVerifyTime           = 150000;  // 2.5 minutes...
-            maxHeaterOffVerifyTime          = 180000;  // 3 minutes...
-            heaterCooldownTime              = 180000;  // 3 minutes...
-            maxOpenLoopHeaterRunTime        = 300000;  // 5 minutes...
-            dormantLowTemp                  = 0;
-            dormantHighTemp                 = 5;
-            productionLowTemp               = 25;
-            productionHighTemp              = 30;
-            heaterTempChangeSenseThreshold  = 10.0f;
-            batteryTempChangeSenseThreshold = 2.5f;
-            maxHeaterTemperature            = 50;
-            maxHeaterStartAttempts          = 4;
-        }
+        /**
+         * The highest battery temperature (in degrees Celcius) allowed when in dark mode.  This value must be in the range [-10..25], and it must
+         * be greater than {@link #darkLowTemp} and less than {@link #lightHighTemp}.  Its default value is 5C.
+         */
+        public float darkHighTemp = 5;
 
+        /**
+         * The lowest battery temperature (in degrees Celcius) allowed when in light mode.  This value must be in the range [0..40], and it must
+         * be less than {@link #lightHighTemp} and greater than {@link #darkLowTemp}.  Its default value is 25C.
+         */
+        public float lightLowTemp = 25;
+
+        /**
+         * The highest battery temperature (in degrees Celcius) allowed when in light mode.  This value must be in the range [0..40], and it must
+         * be greater than {@link #lightLowTemp} and greater than {@link #darkHighTemp}.  It's default value is 30C.
+         */
+        public float lightHighTemp = 30;
+
+        /** Normal heater controller configuration. */
+        public NormalHeaterController.Config      normal;
+
+        /** Battery-temperatures-only heater controller configuration. */
+        public BatteryOnlyHeaterController.Config batteryOnly;
+
+        /** H */
+        public HeaterOnlyHeaterController.Config  heaterOnly;
+
+        /**  */
+        public NoTempsHeaterController.Config     noTemps;
+
+        
         /**
          * Verify the fields of this configuration.
          */
         @Override
         public void verify( final List<String> _messages ) {
-            validate( () -> ((dormantLowTemp >= -10) && (dormantLowTemp <= 25)), _messages,
-                    "Heater Control dormant low temperature is out of range: " + dormantLowTemp );
-            validate( () -> dormantLowTemp < dormantHighTemp, _messages,
-                    "Heater Control dormant low temperature is not less than dormant high temperature: " + dormantLowTemp );
-            validate( () -> dormantLowTemp < productionLowTemp, _messages,
-                    "Heater Control dormant low temperature is not less than production low temperature: " + dormantLowTemp );
-            validate( () -> ((dormantHighTemp >= -10) && (dormantHighTemp <= 25)), _messages,
-                    "Heater Control dormant high temperature is out of range: " + dormantHighTemp );
-            validate( () -> dormantHighTemp < productionHighTemp, _messages,
-                    "Heater Control dormant high temperature is not less than production high temperature: " + dormantHighTemp );
-            validate( () -> ((productionLowTemp >= 0) && (productionLowTemp <= 40)), _messages,
-                    "Heater Control production low temperature is out of range: " + productionLowTemp );
-            validate( () -> productionLowTemp < productionHighTemp, _messages,
-                    "Heater Control production low temperature is not less than production high temperature: " + productionLowTemp );
-            validate( () -> ((productionHighTemp >= 0) && (productionHighTemp <= 40)), _messages,
-                    "Heater Control production high temperature is out of range: " + productionHighTemp );
-            validate( () -> ((maxHeaterOnVerifyTime >= 0) && (maxHeaterOnVerifyTime <= 600000)), _messages,
-                    "Heater Control max heater on verify type is out of range: " + maxHeaterOnVerifyTime);
-            validate( () -> ((maxHeaterOffVerifyTime >= 0) && (maxHeaterOffVerifyTime <= 600000)), _messages,
-                    "Heater Control max heater off verify type is out of range: " + maxHeaterOffVerifyTime);
-            validate( () -> ((heaterCooldownTime >= 60000) && (heaterCooldownTime <=600000)), _messages,
-                    "Heater Control heater cooldown time out of range: " + heaterCooldownTime );
-            validate( () -> ((maxHeaterStartAttempts >= 1) && (maxHeaterStartAttempts <= 10)), _messages,
-                    "Heater Control max heater start attempts is out of range: " + maxHeaterStartAttempts );
-            validate( () -> ((heaterTempChangeSenseThreshold >= 1) && (heaterTempChangeSenseThreshold <= 40)), _messages,
-                    "Heater Control heater temperature change sense threshold is out of range: " + heaterTempChangeSenseThreshold );
-            validate( () -> ((batteryTempChangeSenseThreshold >= 0.25f) && (batteryTempChangeSenseThreshold <= 10)), _messages,
-                    "Heater Control battery temperature change sense threshold is out of range: " + batteryTempChangeSenseThreshold );
-            validate( () -> ((maxOpenLoopHeaterRunTime >= 60000) && (maxOpenLoopHeaterRunTime <= 600000)), _messages,
-                    "Heater Control max open loop heater run time is out of range: " + maxOpenLoopHeaterRunTime );
+            validate( () -> ((darkLowTemp >= -10) && (darkLowTemp <= 25)), _messages,
+                    "Heater Control dark low temperature is out of range: " + darkLowTemp );
+            validate( () -> darkLowTemp < darkHighTemp, _messages,
+                    "Heater Control dark low temperature is not less than dark high temperature: " + darkLowTemp );
+            validate( () -> darkLowTemp < lightLowTemp, _messages,
+                    "Heater Control dark low temperature is not less than light low temperature: " + darkLowTemp );
+            validate( () -> ((darkHighTemp >= -10) && (darkHighTemp <= 25)), _messages,
+                    "Heater Control dark high temperature is out of range: " + darkHighTemp );
+            validate( () -> darkHighTemp < lightHighTemp, _messages,
+                    "Heater Control dark high temperature is not less than light high temperature: " + darkHighTemp );
+            validate( () -> ((lightLowTemp >= 0) && (lightLowTemp <= 40)), _messages,
+                    "Heater Control light low temperature is out of range: " + lightLowTemp );
+            validate( () -> lightLowTemp < lightHighTemp, _messages,
+                    "Heater Control light low temperature is not less than light high temperature: " + lightLowTemp );
+            validate( () -> ((lightHighTemp >= 0) && (lightHighTemp <= 40)), _messages,
+                    "Heater Control light high temperature is out of range: " + lightHighTemp );
             validate( () -> ((tickTime >= 1000) && (tickTime <= 15000)), _messages,
                     "Heater Control tick time is out of range: " + tickTime );
+
+            normal.verify(      _messages );
+            batteryOnly.verify( _messages );
+            heaterOnly.verify(  _messages );
+            noTemps.verify(     _messages );
         }
     }
 }
