@@ -117,15 +117,12 @@ public class LightDetector {
         spec.addTransition( State.SHAKY_DARK,  Event.LOW_LIGHT,    null,                  State.DARK        );
         spec.addTransition( State.SHAKY_DARK,  Event.LIGHT,        null,                  State.LIGHT       );
 
-        FSM<State,Event> trial = null;
-        try {
-            trial = new FSM<>( spec );
-        }
-        catch( IllegalArgumentException _e ) {
-            LOGGER.log( Level.SEVERE, "Fatal error when constructing FSM for Production Detector\n" + spec.getErrorMessage() );
+        if( !spec.isValid() ) {
+            LOGGER.log( Level.SEVERE, "Fatal error when constructing FSM\n" + spec.getErrorMessage() );
             System.exit( 1 );
         }
-        return trial;
+
+        return new FSM<>( spec );
     }
 
 
