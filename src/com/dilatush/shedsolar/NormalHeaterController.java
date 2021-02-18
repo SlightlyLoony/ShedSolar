@@ -249,7 +249,7 @@ public class NormalHeaterController implements HeaterController {
          * The minimum temperature increase (in °C) from the heater output thermocouple to verify that the heater is working.  The default is 10°C,
          * valid values are in the range [5..30].
          */
-        public float confirmOnDelta = -10;
+        public float confirmOnDelta = 10;
 
         /**
          * The maximum time, in milliseconds, to wait for confirmation of the heater working (by sensing the temperature increase on the heater output
