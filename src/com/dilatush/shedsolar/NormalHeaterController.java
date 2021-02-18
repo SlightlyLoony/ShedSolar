@@ -36,6 +36,7 @@ public class NormalHeaterController implements HeaterController {
     private enum State {
         OFF, CONFIRM_SSR_ON, HEATER_COOLING, CONFIRM_HEATER_ON, ON, CONFIRM_SSR_OFF, CONFIRM_HEATER_OFF, COOLING }
 
+
     // the events that drive our FSM...
     private enum Event {
         LO_BATTERY_TEMP, ON_SENSED, NO_TEMP_RISE, COOLED, HEATER_TEMP_RISE, HI_BATTERY_TEMP,
@@ -106,6 +107,8 @@ public class NormalHeaterController implements HeaterController {
     // on OFF:LOW_BATTERY_TEMP -> CONFIRM_SSR_ON...
     private void on_Off_LowBatteryTemp( final FSMTransition<State,Event> _transition ) {
 
+        LOGGER.finest( () -> "Normal heater controller OFF:LOW_BATTERY_TEMP" );
+
         // number of times we've tried to zero...
         turnOnTries = 0;
     }
@@ -113,6 +116,8 @@ public class NormalHeaterController implements HeaterController {
 
     // on CONFIRM_SSR_ON:ON_SENSED -> CONFIRM_HEATER_ON...
     private void on_ConfirmSSROn_OnSensed( final FSMTransition<State,Event> _transition ) {
+
+        LOGGER.finest( () -> "Normal heater controller CONFIRM_SSR_ON:ON_SENSED" );
 
         // read our sense relay and stuff the result away for later use...
         senseRelay = context.ssrSense.isLow();
@@ -124,6 +129,8 @@ public class NormalHeaterController implements HeaterController {
 
     // on CONFIRM_HEATER_ON:NO_TEMP_RISE -> HEATER_COOLING...
     private void on_ConfirmHeaterOn_NoTempRise( final FSMTransition<State,Event> _transition ) {
+
+        LOGGER.finest( () -> "Normal heater controller CONFIRM_HEATER_ON:NO_TEMP_RISE" );
 
         // turn off the heater, as we're gonna cool down for a while...
         context.heaterSSR.high();
@@ -141,6 +148,8 @@ public class NormalHeaterController implements HeaterController {
     // on CONFIRM_SSR_OFF:OFF_SENSED -> CONFIRM_HEATER_OFF...
     private void on_ConfirmSSROff_OffSensed( final FSMTransition<State,Event> _transition ) {
 
+        LOGGER.finest( () -> "Normal heater controller CONFIRM_SSR_OFF:OFF_SENSED" );
+
         // read our sense relay and stuff the result away for later use...
         senseRelay = context.ssrSense.isLow();
 
@@ -152,6 +161,8 @@ public class NormalHeaterController implements HeaterController {
     // on CONFIRM_HEATER_OFF:NO_TEMP_DROP -> COOLING...
     private void on_ConfirmHeaterOff_NoTempDrop( final FSMTransition<State,Event> _transition ) {
 
+        LOGGER.finest( () -> "Normal heater controller CONFIRM_HEATER_OFF:NO_TEMP_DROP" );
+
         // if we are still sensing power, we may have a stuck SSR - send a Hap to that effect...
         if( senseRelay )
             ShedSolar.instance.haps.post( Events.POSSIBLE_SSR_FAILURE );
@@ -160,6 +171,8 @@ public class NormalHeaterController implements HeaterController {
 
     // on entry to CONFIRM_SSR_ON...
     private void onEntry_ConfirmSSROn( final FSMState<State,Event> _state ) {
+
+        LOGGER.finest( () -> "Normal heater controller on entry to CONFIRM_SSR_ON" );
 
         // record our starting temperature (so we can sense the temperature rise)...
         startingTemp = context.heaterTemp;
@@ -176,6 +189,8 @@ public class NormalHeaterController implements HeaterController {
     // on entry to CONFIRM_SSR_OFF...
     private void onEntry_ConfirmSSROff( final FSMState<State,Event> _state ) {
 
+        LOGGER.finest( () -> "Normal heater controller on entry to CONFIRM_SSR_OFF" );
+
         // set a timeout for 100 ms to check sense relay...
         _state.fsm.scheduleEvent( Event.OFF_SENSED, Duration.ofMillis( 100 ) );
     }
@@ -184,14 +199,17 @@ public class NormalHeaterController implements HeaterController {
     // on entry to COOLING...
     private void onEntry_Cooling( final FSMState<State,Event> _state ) {
 
+        LOGGER.finest( () -> "Normal heater controller on entry to COOLING" );
+
         // set a timeout for our cooling period...
         _state.fsm.scheduleEvent( Event.COOLED, Duration.ofMillis( config.coolingTimeMS ) );
     }
 
 
-
     // on entry to OFF...
     private void onEntry_Off( final FSMState<State,Event> _state ) {
+
+        LOGGER.finest( () -> "Normal heater controller on entry to OFF" );
 
         // turn off the SSR and the heater LED (matters for reset event)...
         // if we didn't have a context, then they're already off...
@@ -205,6 +223,8 @@ public class NormalHeaterController implements HeaterController {
     // on exit from ON...
     private void onExit_On( final FSMState<State,Event> _state ) {
 
+        LOGGER.finest( () -> "Normal heater controller on exit from ON" );
+
         // record the starting temperature (so we can sense the temperature drop)...
         startingTemp = context.heaterTemp;
 
@@ -214,31 +234,76 @@ public class NormalHeaterController implements HeaterController {
     }
 
 
+    // on state change...
+    private void stateChange( final State _state ) {
+        LOGGER.finest( "Normal heater controller changed state to: " + _state );
+    }
+
+
     /**
      * The configuration for this class, normally from JavaScript.
      */
     public static class Config extends AConfig {
 
-        // positive number
-        public float confirmOnDelta;
+        /**
+         * The minimum temperature increase (in °C) from the heater output thermocouple to verify that the heater is working.  The default is 10°C,
+         * valid values are in the range [5..30].
+         */
+        public float confirmOnDelta = -10;
 
-        public long confirmOnTimeMS;
+        /**
+         * The maximum time, in milliseconds, to wait for confirmation of the heater working (by sensing the temperature increase on the heater output
+         * thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
+         */
+        public long confirmOnTimeMS = 30000;
 
-        public long initialCooldownPeriodMS;
+        /**
+         * The initial cooldown period (in milliseconds) to use after the heater fails to start.  If the heater doesn't start, it may be that the
+         * thermal "fuse" has tripped and the heater needs to cool down.  The first attempted cooldown period is the length specified here;
+         * subsequent cooldown periods are gradually increased to 5x the length specified here.  The default period is 60,000 (60 seconds);
+         * valid values are in the range [10,000..600,000].
+         */
+        public long initialCooldownPeriodMS = 60000;
 
-        // negative number
-        public float confirmOffDelta;
+        /**
+         * The minimum temperature decrease (in °C) from the heater output thermocouple to verify that the heater is working.  The default is
+         * -10°C, valid values are in the range [-30..-5].  Note that the value is negative (indicating a temperature drop).
+         */
+        public float confirmOffDelta = -10;
 
-        public long confirmOffTimeMS;
+        /**
+         * The maximum time, in milliseconds, to wait for confirmation of the heater turning off (by sensing the temperature decrease on the
+         * heater output thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
+         */
+        public long confirmOffTimeMS = 30000;
 
+        /**
+         * The maximum temperature (in °C), sensed by the heater output thermocouple, to allow while the heater is on.  If the temperature rises
+         * above this level, the heater will be shut off.  The default temperature is 50°C; valid values are in the range [30..60].
+         */
+        public float heaterTempLimit = 50;
 
-        public float heaterTempLimit;
+        /**
+         * The time, in milliseconds, to cool down the heater after turning it off.  The default is 180000 (3 minutes); valid values are
+         * in the range [60000..600000].
+         */
+        public long coolingTimeMS = 180000;
 
-        public long coolingTimeMS;
 
         @Override
-        public void verify( final List<String> _list ) {
-
+        public void verify( final List<String> _messages ) {
+            validate( () -> (confirmOnDelta >= 5) && (confirmOnDelta <= 30), _messages,
+                    "Normal heater controller confirm on delta temperature is out of range: " + confirmOnDelta );
+            validate( () -> (confirmOnTimeMS >= 10000) && (confirmOnTimeMS <= 600000), _messages,
+                    "Normal heater controller confirm on time is out of range: " + confirmOnTimeMS );
+            validate( () -> (initialCooldownPeriodMS >= 10000) && (initialCooldownPeriodMS <= 600000), _messages,
+                    "Normal heater controller initial cooldown period is out of range: " + initialCooldownPeriodMS );
+            validate( () -> (confirmOffDelta >= -30) && (confirmOffDelta <= -5), _messages,
+                    "Normal heater controller confirm off delta temperature is out of range: " + confirmOffDelta );
+            validate( () -> (confirmOffTimeMS >= 10000) && (confirmOffTimeMS <= 600000), _messages,
+                    "Normal heater controller confirm off time is out of range: " + confirmOffTimeMS );
+            validate( () -> (heaterTempLimit >= 30) && (heaterTempLimit <= 60), _messages,
+                    "Normal heater controller heater temperature limit is out of range: " + heaterTempLimit );
         }
     }
 
@@ -253,6 +318,8 @@ public class NormalHeaterController implements HeaterController {
         FSMSpec<State,Event> spec = new FSMSpec<>( State.OFF, Event.COOLED );
 
         spec.enableEventScheduling( ShedSolar.instance.scheduledExecutor );
+
+        spec.setStateChangeListener( this::stateChange );
 
         spec.setStateOnEntryAction( State.CONFIRM_SSR_ON,  this::onEntry_ConfirmSSROn  );
         spec.setStateOnEntryAction( State.CONFIRM_SSR_OFF, this::onEntry_ConfirmSSROff );

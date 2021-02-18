@@ -213,6 +213,38 @@ function init( config ) {
     // be greater than lightLowTemp and greater than darkHighTemp.  It's default value is 30C.
     config.heaterControl.lightHighTemp = 30;
 
+    /*--- normal heater controller configuration ---*/
+
+    // The minimum temperature increase (in °C) from the heater output thermocouple to verify that the heater is working.  The default is 10°C, valid
+    // values are in the range [5..30].
+    config.heaterControl.normal.confirmOnDelta = 10;
+
+    // The maximum time, in milliseconds, to wait for confirmation of the heater working (by sensing the temperature increase on the heater output
+    // thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
+    config.heaterControl.normal.confirmOnTimeMS = 30000;
+
+    // The initial cooldown period (in milliseconds) to use after the heater fails to start.  If the heater doesnt's start, it may be that the
+    // thermal "fuse" has tripped and the heater needs to cool down.  The first attempted cooldown period is the length specified here;
+    // subsequent cooldown periods are gradually increased to 5x the length specified here.  The default period is 60,000 (60 seconds);
+    // valid values are in the range [10,000..600,000].
+    config.heaterControl.normal.initialCooldownPeriodMS = 60000;
+
+    // The minimum temperature decrease (in °C) from the heater output thermocouple to verify that the heater is working.  The default is
+    //  -10°C, valid values are in the range [-30..-5].  Note that the value is negative (indicating a temperature drop).
+    config.heaterControl.normal.confirmOffDelta = -10;
+
+    // The maximum time, in milliseconds, to wait for confirmation of the heater turning off (by sensing the temperature decrease on the
+    // heater output thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
+    config.heaterControl.normal.confirmOffTimeMS = 30000;
+
+    // The maximum temperature (in °C), sensed by the heater output thermocouple, to allow while the heater is on.  If the temperature rises
+    // above this level, the heater will be shut off.  The default temperature is 50°C; valid values are in the range [30..60].
+    config.heaterControl.normal.heaterTempLimit = 50;
+
+    // The time, in milliseconds, to cool down the heater after turning it off.  The default is 180000 (3 minutes); valid values are
+    // in the range [60000..600000].
+    config.heaterControl.normal.coolingTimeMS = 180000;
+
 
 
 
