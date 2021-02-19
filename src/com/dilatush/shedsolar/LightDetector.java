@@ -31,13 +31,13 @@ public class LightDetector {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
-    public  final Info<Mode> light;
+    public  final Info<Mode>       light;
 
     private final Config           config;
     private final ShedSolar        shedSolar;
     private final FSM<State,Event> fsm;
 
-    private Consumer<Mode>   lightSetter;
+    private Consumer<Mode>         lightSetter;
 
 
     /**
@@ -76,7 +76,7 @@ public class LightDetector {
 
         // if we've got data from the Outback MATE3S, and it shows < 98% SOC, then the panel power production is our best source of data...
         // it's best because it handles snow-covered panels AND clouds AND daylight...
-        if( outback.isInfoAvailable() && (outback.getInfo().stateOfCharge <= 98.0 ) ) {
+        if( outback.isInfoAvailable() && (outback.getInfo().stateOfCharge <= config.socThreshold ) ) {
             light = (outback.getInfo().panelPower > config.panelThreshold);
         }
 
@@ -146,13 +146,13 @@ public class LightDetector {
 
     // on LIGHT:LOW_LIGHT to SHAKY_LIGHT...
     private void onLightLowLight( final FSMTransition<State,Event> _transition ) {
-        _transition.setTimeout( Event.DARK, Duration.ofMillis( config.interval * config.toDormantDelay ) );
+        _transition.setTimeout( Event.DARK, Duration.ofMillis( config.interval * config.toDarkDelay ) );
     }
 
 
     // on DARK:GOOD_LIGHT to SHAKY_LIGHT...
     private void onDarkGoodLight( final FSMTransition<State,Event> _transition ) {
-        _transition.setTimeout( Event.LIGHT, Duration.ofMillis( config.interval * config.toProductionDelay ) );
+        _transition.setTimeout( Event.LIGHT, Duration.ofMillis( config.interval * config.toLightDelay ) );
     }
 
 
@@ -210,6 +210,12 @@ public class LightDetector {
         public double lon;
 
         /**
+         * The maximum state of charge (SOC) for the batteries to use solar panel power production to indicate enough light for solar production.
+         * The default value is 98 (percent); valid values are in the range [0..100].
+         */
+        public double socThreshold = 98;
+
+        /**
          * The pyrometer reading (in watts/square meter) threshold.  Values above the specified value indicate enough light for solar production.
          * The value must be in the range [0..1200]; the default value is 80.
          */
@@ -228,18 +234,18 @@ public class LightDetector {
         public long interval = 60000;
 
         /**
-         * The delay before switching from dormant to production mode, when adequate brightness has been detected, in "ticks" (see interval).  The
-         * idea behind this delay is to avoid jumping to production mode if there's only a brief burst of light, like a hole in the clouds.  The
+         * The delay before switching from dark to light mode, when adequate brightness has been detected, in "ticks" (see interval).  The
+         * idea behind this delay is to avoid jumping to light mode if there's only a brief burst of light, like a hole in the clouds.  The
          * value must be in the range [0..120]; the default value is 5.
          */
-        public int toProductionDelay = 5;
+        public int toLightDelay = 5;
 
         /**
-         * The delay before switching from production to dormant mode, when inadequate brightness has been detected, in "ticks" (see interval).  The
-         * idea behind this delay is to avoid jumping to dormant mode if there's oly a brief interruption of light, like a cloud blocking the sun.
+         * The delay before switching from light to dark mode, when inadequate brightness has been detected, in "ticks" (see interval).  The
+         * idea behind this delay is to avoid jumping to dark mode if there's only a brief interruption of light, like a cloud blocking the sun.
          * The value must be in the range [0..240]; the default value is 60.
          */
-        public int toDormantDelay = 60;
+        public int toDarkDelay = 60;
 
 
         /**
@@ -248,19 +254,21 @@ public class LightDetector {
         @Override
         public void verify( final List<String> _messages ) {
             validate( () -> ((lat >= -90) && (lat <= 90)), _messages,
-                    "Production Detector latitude out of range: " + lat );
+                    "Light Detector latitude out of range: " + lat );
             validate( () -> ((lon >= -180) && (lon <= 180)), _messages,
-                    "Production Detector longitude out of range: " + lat );
+                    "Light Detector longitude out of range: " + lat );
             validate( () -> ((pyrometerThreshold >= 0) && (pyrometerThreshold <= 1200)), _messages,
-                    "Production Detector pyrometer watts/square meter threshold is out of range: " + pyrometerThreshold );
+                    "Light Detector pyrometer watts/square meter threshold is out of range: " + pyrometerThreshold );
             validate( () -> ((panelThreshold >= 0) && (panelThreshold <= 10000)), _messages,
-                    "Production Detector solar panel power threshold is out of range: " + panelThreshold );
+                    "Light Detector solar panel power threshold is out of range: " + panelThreshold );
             validate( () -> ((interval >= 10000) && (interval <= 600000)), _messages,
-                    "Production Detector 'tick' interval (in milliseconds) is out of range: " + interval);
-            validate( () -> ((toProductionDelay >= 0) && (toProductionDelay <= 120)), _messages,
-                    "Production Detector to production delay (in 'ticks') is out of range: " + toProductionDelay );
-            validate( () -> ((toDormantDelay >= 0) && (toDormantDelay <= 240)), _messages,
-                    "Production Detector to dormant delay (in 'ticks') is out of range: " + toDormantDelay );
+                    "Light Detector 'tick' interval (in milliseconds) is out of range: " + interval);
+            validate( () -> ((toLightDelay >= 0) && (toLightDelay <= 120)), _messages,
+                    "Light Detector to light delay (in 'ticks') is out of range: " + toLightDelay );
+            validate( () -> ((toDarkDelay >= 0) && (toDarkDelay <= 240)), _messages,
+                    "Light Detector to dark delay (in 'ticks') is out of range: " + toDarkDelay );
+            validate( () -> (socThreshold >= 0) && (socThreshold <= 100), _messages,
+                    "Light Detector SOC threshold is out of range: " + socThreshold );
         }
     }
 }

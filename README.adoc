@@ -25,11 +25,83 @@ ShedSolar has several dependencies:
 
 The author is a retired software and hardware engineer who did this just for fun, and who (so far, anyway) has no code reviewers to upbraid him. Please feel free to fill in this gap! You may contact the author at link:mailto:[tom@dilatush.com].
 
+== Software Components
+
+=== TempReader
+The `TempReader` provides feedback for ShedSolar about the temperature inside the battery box.  In normal operation, ShedSolar uses this information to determine when the battery box heater needs to be turned on or off, and also to verify that the heater is working correctly.
+
+ShedSolar has two thermocouples, both located inside the battery box.  One of them, for battery temperature, is located underneath one of the batteries, out of the path of air circulated by the heater's fan.  The other one, for heater output temperature, is located in front of the fan, directly in the path of the air pushed out of the heater by its fan.  These two thermocouples are attached to a pair of MAX31855 type K thermocouple interface chips, which are in turn attached to the Raspberry Pi by SPI.
+
+One might expect that reading the temperature with such a setup would be a near-trivial affair, but such is not the case.  For reasons that we've never been able to figure out, both of the MAX31855 chips read anomalous values (lower than actual) for about 2 seconds out of every 10.  To deal with this, we've implemented a noise filter that throws out samples that are furthest from the mean of over 10 seconds of samples.  This seems to work quite well.
+
+The MAX31855 chips are capable of detecting the common kinds of thermocouple failures (shorts and opens).  They also happen to provide ambient temperature (at the chip), albeit at a lower resolution than the thermocouple temperature.  The `TempReader` module publishes all of this information in `InfoView` instances:
+
+[cols="<,<"]
+|===
+|public final variable |Information
+
+|`batteryTemperatureSensorStatus`|A `TempSensorStatus` structure with detailed information about the status of the sensor.
+|`batteryTemperature`|The temperature of the battery thermocouple, in °C ±0.25°C.
+|`heaterTemperatureSensorStatus`|A `TempSensorStatus` structure with detailed information about the status of the sensor.
+|`heaterTemperature`|The temperature of the heater output thermocouple, in °C ±0.25°C.
+|`ambientTemperature`|The temperature of the MAX31855 chip (inside the ShedSolar box) in °C, ±0.0625°C.
+|===
+
+=== Outbacker
+The `Outbacker` provides information read periodically from the Outback charger/inverter, so long as the ShedSolar system can "talk" to it.  The Outback charger/inverter has a simple JSON API at `<IP address>/Dev_status.cgi?&Port=0`.  Outbacker reads this URL by default once per minute, decodes and collects the information ShedSolar is interested in, and publishes it as an `OutbackData` structure in an `InfoView` at `public final outback`.
+
+=== ShedSolarActor
+The `ShedSolarActor` provides a MOP postoffice for ShedSolar.  It also subscribes to the per-minute weather report from our weather station to get the solar irradiance and outdoor temperature information that are useful to ShedSolar.  It publishes this information in `InfoView` instances `public final solarIrradiance` (reporting watts per square meter) and `outsideTemperature` (reporting °C, ±1%).
+
+=== LightDetector
+The `LightDetector` provides ShedSolar with a key piece of information: whether there is enough light for the solar panels to produce electricity (which will charge the batteries).  ShedSolar uses this information to determine how cold it may allow the batteries to get.  The batteries can safely get colder (down to 0°C) when they're not being charged, but to be charged they should be warmer (at least 10°C, but preferably more like 20°C).  Allowing the batteries to get colder (when it is safe to do so) has the advantage of requiring less heater power.
+
+At first blush, it may seem that this job is as simple as knowing whether it is daytime or nighttime, but in that pesky real world it's actually a bit more complicated.  Most importantly, the solar panels may be covered with snow -- so even if the sun is shining brightly, they can't generate any power.  Usually the snow will slide off after a few hours of sunlight, but it is possible for the snow to stay on even longer.  In addition, thick clouds and precipitation can (and in the winter, often do) dim the sunlight so much the solar panels cannot produce power.
+
+`LightDetector` has three different ways to detect when it's light, depending on what information it has available.  In preference order:
+
+. *Directly detecting the solar panels' power production:* If the state of charge of the solar system's batteries is under about 98%, the solar panels will produce power whenever there's enough sun shining on them.  The `Outbacker`, if it can communicate with the Outback charger/inverter, provides the solar panel's output voltage and current.  The output voltage times the output current equals the output power, and if this is over about 100 watts, then we know that (a) it's daylight, (b) there aren't enough clouds to block the sun, and (c) the panels are not covered with snow.  If ShedSolar can "talk" with the Outback charger/inverter and the batteries' state of charge is under 98%, this is the information we use.
+. *Reading the solar power from our weather station's pyrometer:*  When we can't use the solar panels power production as our information source, the next best is our weather station's pyrometer (a device for measuring total solar power output).  From observation, the solar panels (if not blocked by snow) will produce power when the pyrometer is reporting above about 225 watts per square meter of solar irradiation.  The weather station is located about 150 meters from the shed's solar panels, so it will not always have the same sun conditions as the panels (scudding clouds, for instance, can leave one in sunlight while the other is shaded).  However, in the absence of direct solar panel power production measurement, it's our next best source of information.  Normally our weather station sends out reports once a minute.  The `ShedSolarActor` subscribes to these reports and publishes the information if it's available.
+. *Using computed sunrise and sunset times to determine when it is day or night:* If neither method above is available, `LightDetector` falls back to simply computing whether it's day or night.  This requires just the latitude and longitude of the shed's solar panels, and the time.
+
+`LightDetector` publishes its information in the `InfoView` variable `public final light`, which contains the `LightDetector.Mode` value of either `LIGHT` or `DARK`.
+
+=== BatteryTempLED
+The `BatteryTempLED` has a very simple job: to flash the battery temperature LED, using the duty cycle of the LED to indicate the battery temperature.  The LED has two modes:
+
+. If battery temperature information is not available, the LED "rapid flashes" (by default at 0.8Hz) to indicate a problem.
+. If battery temperature _is_ available, the LED's duty cycle (by default over a 2 second period) varies to indicate the battery temperature.  At the low-end (LED always off) the battery temperature is by default 0°C or less.  At the high-end (LED always on), the battery temperature is by default 45°C or greater.  Thus, by default, the LED's duty cycle is 50% (half on, half off) when the battery temperature is 22.5°C (72.5°F).
+
+=== HeaterControl
+The `HeaterControl` turns the heater (in the battery box) on and off, along with the associated heater power indicator LED.  `HeaterControl` uses information from the other ShedSolar components to decide when to do this.  It has four modes of operation, depending on whether battery temperature information or heater output temperature is available.  Each of these modes is handled by a different component:
+
+|===
+|Information Available|Component that handles it
+
+|battery temperature _and_ heater output temperature|Normal mode, handled by `NormalHeaterController`
+|_only_ battery temperature|Battery-only mode, handled by `BatteryOnlyHeaterController`
+|_only_ heater output temperature|Heater-only mode, handled by `HeaterOnlyHeaterController`
+|_neither_ battery temperature or heater output temperature|NoTemps mode, handled by `NoTempsHeaterController`
+|===
+
+==== NormalHeaterController
+In normal mode, `NormalHeaterController` can do the best job maintaining battery temperature.  The battery temperature is used to directly sense when the heater needs to be turned on or off.  The heater output temperature is used to verify that the heater has turned on or off.  A failure to turn on _could_ indicate that the heater has failed.  However, by observation we know that the heater has a sort of thermal "fuse" that prevents it from turning on if the heater is still hot.  We speculate that this thermal fuse doesn't trip during normal operation as the heater's fan is blowing cold air through the heater constantly, preventing it from overheating.  However, immediately after turning the heater off the flow of air ceases, and this causes the inside of the heater (and the thermal fuse) to heat up.  In any case, we have learned that if the heater fails to turn on, simply waiting for a few minutes for it to cool down will solve the problem.  So `NormalHeaterController` has logic to detect the failure of the heater to start, and when that happens, to wait for a while before trying again.  Only after several attempts (and failures) will it trigger an alert about a heater failure.  After the heater has been on for a while and is then turned off, `NormalHeaterController` also has logic to enforce a cooldown period.  In addition, the availability of heater output temperature allows a safety measure: if the heater output temperature gets higher than is safe for the batteries, the heater will be shut off.
+
+==== BatteryOnlyHeaterController
+In battery-only mode, `BatteryOnlyHeaterController` is very similar to `NormalHeaterController`, except that confirmation of the heater working is indirect (and takes longer), and the overtemperature saftey measure can't be implemented.
+
+==== HeaterOnlyHeaterController
+In heater-only mode, `HeaterOnlyHeaterController` can't sense the battery temperature while the heater is running, but if the heater has been off for a while (a few minutes), the air temperature around the batteries (where the heater output thermocouple is located) will be a reasonable approximation of the battery temperature.  `HeaterOnlyHeaterController` leverages this fact, by running the heater for a fixed period, turning off and waiting for the air temperature to cool down to roughly the batteries' temperature, _then_ using that temperature to decide when to turn the heater back on.
+
+==== NoTempsHeaterController
+In no-temps mode we have the most challenging scenario for the `HeaterControl`, implemented by `NoTempsHeaterController`.  It falls back on a method with no direct feedback -- the "open loop" solution.  First it gets the outside temperature (either from the ambient temperature capablity of `TempReader` or from our weather station via `ShedSolarActor`).  Then it figures the difference between the outside temperature and the target temperature for the batteries.  Finally, it uses a simple formula to calculate the duty cycle that the heater needs to run in order to stay above the target temperature.  This formula assumes a linear relationship between average heater power and average temperature difference between the battery box and the outside air.
+
 == Some implementation notes…
 
 === Hardware
 
 The hardware used in this project, excluding cables and connections, is as follows:
+
 * One Raspberry Pi 3B+ (with CanaKit wall wart power supply)
 * Two Adafruit 269 thermocouple interfaces (MAX 31855 chip)
 * Two type K thermocouples with 2 meter leads

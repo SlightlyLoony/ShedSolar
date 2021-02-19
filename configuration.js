@@ -155,38 +155,41 @@ function init( config ) {
 
 
     /*
-     * Production Detector configuration.
+     * Light Detector configuration.
      */
 
     // The latitude, in degrees, of the solar system's location.  This is used to calculate the sunrise and sunset times.  The value must be in
     // the range [-90..90].  There is no default value.
-    config.productionDetector.lat = 41.582777;
+    config.lightDetector.lat = 41.582777;
 
     // The longitude, in degrees, of the solar system's location.  This is used to calculate the sunrise and sunset times.  The value must be in
     // the range [-180..180].  There is no default value.
-    config.productionDetector.lon = -111.839533;
+    config.lightDetector.lon = -111.839533;
+
+    // The maximum state of charge (SOC) for the batteries to use solar panel power production to indicate enough light for solar production.
+    config.lightDetector.socThreshold = 98;
 
     // The interval (in milliseconds) that the production detector operates on; the "ticks" of its clock.  The value must be in the
     // range [10,000..600,000]; the default value is 60,000 (one minute).
-    config.productionDetector.interval = 60000;
+    config.lightDetector.interval = 60000;
 
     // The pyrometer reading (in watts/square meter) threshold.  Values above the specified value indicate enough light for solar production.
-    // The value must be in the range [0..1200]; the default value is 80.
-    config.productionDetector.pyrometerThreshold = 200;
+    // The value must be in the range [0..1200]; the default value is 225.
+    config.lightDetector.pyrometerThreshold = 200;
 
     // The solar panel power threshold.  Values above the specified value indicate enough light for solar production.  The value must be in
     // the range [0..10000]; the default value is 200.
-    config.productionDetector.panelThreshold = 200;
+    config.lightDetector.panelThreshold = 200;
 
     // The delay before switching from dormant to production mode, when adequate brightness has been detected, in "ticks" (see interval).  The
     // idea behind this delay is to avoid jumping to production mode if there's only a brief burst of light, like a hole in the clouds.  The
     // value must be in the range [0..120]; the default value is 5.
-    config.productionDetector.toProductionDelay = 5;
+    config.lightDetector.toProductionDelay = 5;
 
     // The delay before switching from production to dormant mode, when inadequate brightness has been detected, in "ticks" (see interval).  The
     // idea behind this delay is to avoid jumping to dormant mode if there's oly a brief interruption of light, like a cloud blocking the sun.
     // The value must be in the range [0..240]; the default value is 60.
-    config.productionDetector.toDormantDelay = 60;
+    config.lightDetector.toDormantDelay = 60;
 
 
     /*

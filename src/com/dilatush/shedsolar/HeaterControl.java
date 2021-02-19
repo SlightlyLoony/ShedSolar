@@ -26,6 +26,8 @@ import static com.dilatush.shedsolar.LightDetector.Mode.LIGHT;
  */
 public class HeaterControl {
 
+    // TODO: add publication of heater on/off, problems...
+
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
     private final Config    config;      // our configuration...
