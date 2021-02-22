@@ -255,8 +255,8 @@ function init( config ) {
     config.heaterControl.batteryOnly.confirmOnDelta = 10;
 
     // The maximum time, in milliseconds, to wait for confirmation of the heater working (by sensing the temperature increase on the battery
-    // thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
-    config.heaterControl.batteryOnly.confirmOnTimeMS = 30000;
+    // thermocouple).  The default is 180,000 (3 minutes); valid values are in the range [10,000..600,000].
+    config.heaterControl.batteryOnly.confirmOnTimeMS = 180000;
 
     // The initial cooldown period (in milliseconds) to use after the heater fails to start.  If the heater doesnt's start, it may be that the
     // thermal "fuse" has tripped and the heater needs to cool down.  The first attempted cooldown period is the length specified here;
@@ -265,71 +265,49 @@ function init( config ) {
     config.heaterControl.batteryOnly.initialCooldownPeriodMS = 60000;
 
     // The minimum temperature decrease (in °C) from the heater output thermocouple to verify that the heater is working.  The default is
-    //  -10°C, valid values are in the range [-30..-5].  Note that the value is negative (indicating a temperature drop).
+    //  -5°C, valid values are in the range [-30..-5].  Note that the value is negative (indicating a temperature drop).
     config.heaterControl.batteryOnly.confirmOffDelta = -5;
 
     // The maximum time, in milliseconds, to wait for confirmation of the heater turning off (by sensing the temperature decrease on the
-    // battery thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
-    config.heaterControl.batteryOnly.confirmOffTimeMS = 30000;
+    // battery thermocouple).  The default is 180,000 (3 minutes); valid values are in the range [10,000..600,000].
+    config.heaterControl.batteryOnly.confirmOffTimeMS = 180000;
 
     // The time, in milliseconds, to cool down the heater after turning it off.  The default is 180000 (3 minutes); valid values are
     // in the range [60000..600000].
     config.heaterControl.batteryOnly.coolingTimeMS = 180000;
 
+    /*--- heater-only heater controller configuration ---*/
 
+    // The minimum temperature increase (in °C) from the heater thermocouple to verify that the heater is working.  The default is 10°C, valid
+    // values are in the range [5..30].
+    config.heaterControl.heaterOnly.confirmOnDelta = 10;
 
+    // The maximum time, in milliseconds, to wait for confirmation of the heater working (by sensing the temperature increase on the battery
+    // thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
+    config.heaterControl.heaterOnly.confirmOnTimeMS = 30000;
 
-    // This value defines the amount of change in the temperature (in degrees Celcius) measured by the thermocouple in the heater's air output
-    // must be seen to verify that the heater has successfully turned on or off.  This value must be in the range [1..40] degrees Celcius, and
-    // its default value is 10 degrees Celcius.
-    config.heaterControl.heaterTempChangeSenseThreshold = 10.0;
+    // The initial cooldown period (in milliseconds) to use after the heater fails to start.  If the heater doesnt's start, it may be that the
+    // thermal "fuse" has tripped and the heater needs to cool down.  The first attempted cooldown period is the length specified here;
+    // subsequent cooldown periods are gradually increased to 5x the length specified here.  The default period is 60,000 (60 seconds);
+    // valid values are in the range [10,000..600,000].
+    config.heaterControl.heaterOnly.initialCooldownPeriodMS = 60000;
 
-    // This value defines the amount of change in the temperature (in degrees Celcius) measured by the thermocouple under the batteries
-    // must be seen to verify that the batteries are being heated or cooled.  This value must be in the range [0.25..10] degrees Celcius, and
-    // its default value is 2.5 degrees Celcius.
-    config.heaterControl.batteryTempChangeSenseThreshold = 2.5;
+    // The minimum temperature decrease (in °C) from the heater output thermocouple to verify that the heater is working.  The default is
+    //  -10°C, valid values are in the range [-30..-5].  Note that the value is negative (indicating a temperature drop).
+    config.heaterControl.heaterOnly.confirmOffDelta = -10;
 
-    // This value defines the maximum temperature (in degrees Celcius) allowed in the heater's air output.  If this temperature is exceeded, the
-    // heater will be shut down even if the batteries' temperature is too low.  This is a safety feature in case the heater's internal
-    // overtemperature "breaker" fails.  The heater will be restarted after a cooldown period.  This value must be in the range [30..75] degrees
-    // Celcius, and its default value is 50C.
-    config.heaterControl.maxHeaterTemperature = 50;
+    // The maximum time, in milliseconds, to wait for confirmation of the heater turning off (by sensing the temperature decrease on the
+    // battery thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
+    config.heaterControl.heaterOnly.confirmOffTimeMS = 30000;
 
-    // This value determines how many times to attempt starting the heater before assuming it has actually failed.  The heater has an
-    // overtemperature "breaker" that can prevent it from starting if the internal temperature of the heater is too high.  To handle this, if
-    // we try and fail to start the heater, then we wait for a while (see heaterCooldownTime) to let the heater cool down and try again.
-    // This value must be in the range [1..10], and its default value is 4.
-    config.heaterControl.maxHeaterStartAttempts = 4;
+    // The time, in milliseconds, to cool down the heater after turning it off.  The default is 180000 (3 minutes); valid values are
+    // in the range [60000..600000].
+    config.heaterControl.heaterOnly.coolingTimeMS = 180000;
 
+    // The time, in minutes, to run the heater per degree of temperature difference between the battery temperature and the outside temperature.
+    // The default value is 0.2; valid values are in the range [0.01..1].
+    config.heaterControl.minutesPerDeltaDegree = 0.2;
 
-    // The heater thermocouple measures the temperature of the air blowing out of the heater.  When turning the heater on, the temperature is
-    // measured just before turning it on, and then the heater's operation is verified when the temperature increases by at least
-    // heaterTempChangeSenseThreshold degrees C.  This value determines the maximum time (in milliseconds) to wait for that
-    // verification.  If the time is exceeded, the heater has failed to start.  Note that the heater failing to start isn't necessarily fatal,
-    // as it may simply be too hot and in need of a cooldown cycle.  This value must be in the range [0..600,000], and the default value is
-    // 150,000 (or two and a half minutes).
-    config.heaterControl.maxHeaterOnVerifyTime = 150000;  // 2.5 minutes...
-
-    // The heater thermocouple measures the temperature of the air blowing out of the heater.  When turning the heater off, the temperature is
-    // measured just before turning it off, and then the heater's operation is verified when the temperature decreases by at least
-    // heaterTempChangeSenseThreshold degrees C.  This value determines the maximum time (in milliseconds) to wait for that
-    // verification.  If the time is exceeded, the heater has failed to shut off.  This value must be in the range [0..600,000], and the default
-    // value is 180,000 (or three minutes).
-    config.heaterControl.maxHeaterOffVerifyTime = 180000;  // 3 minutes...
-
-    // When the heater fails to turn on, a heater cooldown cycle is initiated for up to maxHeaterStartAttempts times.  This value is
-    // multiplied by the retry attempt number to determine how long to wait (in milliseconds) for cooling down (with the heater off).  For
-    // example, if this value was set to 180,000 (for 3 minutes), then the cooldown period would be 3 minutes on the first heater start retry, 6
-    // minutes on the second retry, 9 minutes on the third retry, and so on.  This value must be in the range [60,000..600,000] milliseconds.
-    // The default value is 180,000.
-    config.heaterControl.heaterCooldownTime = 180000;  // 3 minutes...
-
-    // If the battery temperature thermocouple fails, but we sense that the heater temperature is below the current low battery temperature
-    // threshold, then we assume that the batteries need to be heated and we turn the heater on.  However, because we can't sense the actual
-    // battery temperature we just run "open loop", leaving the heater on for a fixed amount of time.  This value determines that time, in
-    // milliseconds.  Its value must be in the range [60,000..600,000] milliseconds (one minute to ten minutes); the default value is 300,000
-    // milliseconds (five minutes).
-    config.heaterControl.maxOpenLoopHeaterRunTime = 300000;  // 5 minutes...
 
     /*
      * Console server configuration...

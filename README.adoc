@@ -73,7 +73,7 @@ The `BatteryTempLED` has a very simple job: to flash the battery temperature LED
 . If battery temperature _is_ available, the LED's duty cycle (by default over a 2 second period) varies to indicate the battery temperature.  At the low-end (LED always off) the battery temperature is by default 0°C or less.  At the high-end (LED always on), the battery temperature is by default 45°C or greater.  Thus, by default, the LED's duty cycle is 50% (half on, half off) when the battery temperature is 22.5°C (72.5°F).
 
 === HeaterControl
-The `HeaterControl` turns the heater (in the battery box) on and off, along with the associated heater power indicator LED.  `HeaterControl` uses information from the other ShedSolar components to decide when to do this.  It has four modes of operation, depending on whether battery temperature information or heater output temperature is available.  Each of these modes is handled by a different component:
+The `HeaterControl` turns the heater (in the battery box) on and off, along with the associated heater power indicator LED.  `HeaterControl` uses information from the other ShedSolar components to decide when to do this.  It has four modes of operation, depending on whether battery temperature information or heater output temperature is available.  Each of these modes is handled by a different component, all of which are based on finite state machines (FSMs):
 
 |===
 |Information Available|Component that handles it
@@ -94,7 +94,43 @@ In battery-only mode, `BatteryOnlyHeaterController` is very similar to `NormalHe
 In heater-only mode, `HeaterOnlyHeaterController` can't sense the battery temperature while the heater is running, but if the heater has been off for a while (a few minutes), the air temperature around the batteries (where the heater output thermocouple is located) will be a reasonable approximation of the battery temperature.  `HeaterOnlyHeaterController` leverages this fact, by running the heater for a fixed period, turning off and waiting for the air temperature to cool down to roughly the batteries' temperature, _then_ using that temperature to decide when to turn the heater back on.
 
 ==== NoTempsHeaterController
-In no-temps mode we have the most challenging scenario for the `HeaterControl`, implemented by `NoTempsHeaterController`.  It falls back on a method with no direct feedback -- the "open loop" solution.  First it gets the outside temperature (either from the ambient temperature capablity of `TempReader` or from our weather station via `ShedSolarActor`).  Then it figures the difference between the outside temperature and the target temperature for the batteries.  Finally, it uses a simple formula to calculate the duty cycle that the heater needs to run in order to stay above the target temperature.  This formula assumes a linear relationship between average heater power and average temperature difference between the battery box and the outside air.
+In no-temps mode we have the most challenging scenario for the `HeaterControl`, implemented by `NoTempsHeaterController`.  It falls back on a method with no direct feedback -- the "open loop" solution.  First it gets the outside temperature (either from the ambient temperature capablity of `TempReader` or from our weather station via `ShedSolarActor`).  Then it figures the difference between the outside temperature and the target temperature for the batteries.  Finally, it calculates the duty cycle that the heater needs to run in order to stay above the target temperature.
+
+We assume the following formula approximates the temperature inside the battery box as it moves toward the temperature outside the battery box, when the heater is off.  We're assuming zero temperature increase in the batteries themselves, which is probably wrong but not by a significant amount:
+....
+    Tb = Ti + Td(1-e^(-tK)), where:
+        Tb = temperature at battery, in °C
+        Ti = temperature at battery at t=0, in °C
+        Td = temperature difference between outside and Ti (Toutside - Ti), in °C
+        e = Euler's constant
+        t = time since Ti was measured, in seconds
+        K = constant, a function of the heat capacity of the batteries and the quality of the insulation.
+            TBD by observation
+....
+When the heater is on, the temperature inside the box should increase linearly over time, with the rate mainly dependent on the heat capacity of the batteries.  The loss of heat to outside the box should be negligible for our purposes here, so we're ignoring it.
+
+With the two considerations above, this open-loop problem boils down to two calculations:
+
+* how long it will take for the inside of the battery box to cool from the high target temperature to the low target temperature (when the heater is off)
+* how long it will take the heater to warm the inside of the battery box from the low target temperature to the high target temperature
+
+The second is directly observable when the sensors are working correctly, and we shall do so.  The first is more challenging, as it requires us to estimate the constant K in the formula above.  First we solve for K in the formula above to get this formula:
+....
+    K = -(ln(-((Tb - Ti)/Td - 1))/t)
+....
+Then observe a few cycles of normal operation, which should allow us to get good values for Tb, Ti, Td, and t  - and then plug them into the formula above to get K.  Once we have an estimate of K, we can solve for t in the earlier formula to get this formula:
+....
+    t = -(ln(-((Tb - Ti)/Td - 1))/K)
+....
+With that formula we can calculate an estimate for how long it will take for the temperature inside the battery box to drop to the targeted low temperature.  For example, suppose that K was observed to be 0.000841.  After a given heating cycle, we assume that the temperature inside the battery box is 20°C (Ti).  The outside temperature is -4°C, so Td is -24°C.  Our target low temperature is 10°C (Tb).  Solving for t, we get ~641 seconds, or almost 11 minutes.
+
+If our calculated estimates don't match reality, one of two things will happen:
+
+* If we're heating too much, the inside of the battery compartment will be warmer than we want it to be.  Note, however, that the rate at which it cools is linearly related to difference between the outside temperature and the temperature inside the battery box.  This implies that an error in this direction will result a somewhat higher warmest temperature, and not a constantly increasing temperature.
+* If we're heating too little, the inside of the battery compartment will be cooler than we want it to be.  For the same reason noted in the preceding bullet, this should result in a somewhat lower lowest temperature, and not a constantly decreasing temperature.
+
+Since a somewhat higher temperature would still be within the batteries' operating parameters, whereas a lower temperature might not be, it seems better to err on the warmer side -- so we are using a formula that includes a "safety tweak" in this direction.
+
 
 == Some implementation notes…
 

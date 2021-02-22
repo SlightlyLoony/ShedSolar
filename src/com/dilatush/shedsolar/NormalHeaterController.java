@@ -73,18 +73,18 @@ public class NormalHeaterController implements HeaterController {
             fsm.onEvent( Event.HI_BATTERY_TEMP );
 
         // issue high heater temp, if warranted...
-        if( _context.batteryTemp > config.heaterTempLimit )
+        if( _context.heaterTemp > config.heaterTempLimit )
             fsm.onEvent( Event.HI_HEATER_TEMP );
 
         // if we're in confirming heater on state, see if we've risen enough...
         if( fsm.getStateEnum() == State.CONFIRM_HEATER_ON ) {
-            if( _context.batteryTemp > (startingTemp + config.confirmOnDelta ) )
+            if( _context.heaterTemp > (startingTemp + config.confirmOnDelta ) )
                 fsm.onEvent( Event.HEATER_TEMP_RISE );
         }
 
         // if we're in confirming heater off state, see if we've dropped enough...
         if( fsm.getStateEnum() == State.CONFIRM_HEATER_OFF ) {
-            if( _context.batteryTemp < (startingTemp + config.confirmOffDelta ) )
+            if( _context.heaterTemp < (startingTemp + config.confirmOffDelta ) )
                 fsm.onEvent( Event.HEATER_TEMP_DROP );
         }
     }
@@ -145,6 +145,17 @@ public class NormalHeaterController implements HeaterController {
     }
 
 
+    // on CONFIRM_HEATER_ON:HEATER_TEMP_RISE -> ON...
+    private void on_ConfirmHeaterOn_HeaterTempRise( final FSMTransition<State,Event> _transition ) {
+
+        LOGGER.finest( () -> "Normal heater controller CONFIRM_HEATER_ON:HEATER_TEMP_RISE" );
+
+        // if sense relay is false, then we probably have a bad sense relay - send a Hap to that effect...
+        if( !senseRelay )
+            ShedSolar.instance.haps.post( Events.POSSIBLE_SENSE_RELAY_FAILURE );
+    }
+
+
     // on CONFIRM_SSR_OFF:OFF_SENSED -> CONFIRM_HEATER_OFF...
     private void on_ConfirmSSROff_OffSensed( final FSMTransition<State,Event> _transition ) {
 
@@ -166,6 +177,17 @@ public class NormalHeaterController implements HeaterController {
         // if we are still sensing power, we may have a stuck SSR - send a Hap to that effect...
         if( senseRelay )
             ShedSolar.instance.haps.post( Events.POSSIBLE_SSR_FAILURE );
+    }
+
+
+    // on CONFIRM_HEATER_OFF:HEATER_TEMP_DROP -> COOLING...
+    private void on_ConfirmHeaterOff_HeaterTempDrop( final FSMTransition<State,Event> _transition ) {
+
+        LOGGER.finest( () -> "Normal heater controller CONFIRM_HEATER_OFF:HEATER_TEMP_DROP" );
+
+        // if we are still sensing power, we may have a bad sense relay - send a Hap to that effect...
+        if( senseRelay )
+            ShedSolar.instance.haps.post( Events.POSSIBLE_SENSE_RELAY_FAILURE );
     }
 
 
@@ -304,6 +326,8 @@ public class NormalHeaterController implements HeaterController {
                     "Normal heater controller confirm off time is out of range: " + confirmOffTimeMS );
             validate( () -> (heaterTempLimit >= 30) && (heaterTempLimit <= 60), _messages,
                     "Normal heater controller heater temperature limit is out of range: " + heaterTempLimit );
+            validate( () -> (coolingTimeMS >= 60000) && (coolingTimeMS <= 600000), _messages,
+                    "Normal heater controller cooling time is out of range: " + coolingTimeMS );
         }
     }
 
@@ -328,27 +352,27 @@ public class NormalHeaterController implements HeaterController {
 
         spec.setStateOnExitAction( State.ON, this::onExit_On );
 
-        spec.addTransition( State.OFF,                Event.LO_BATTERY_TEMP,  this::on_Off_LowBatteryTemp,          State.CONFIRM_SSR_ON     );
-        spec.addTransition( State.CONFIRM_SSR_ON,     Event.ON_SENSED,        this::on_ConfirmSSROn_OnSensed,       State.CONFIRM_HEATER_ON  );
-        spec.addTransition( State.CONFIRM_HEATER_ON,  Event.NO_TEMP_RISE,     this::on_ConfirmHeaterOn_NoTempRise,  State.HEATER_COOLING     );
-        spec.addTransition( State.HEATER_COOLING,     Event.COOLED,           null, State.CONFIRM_SSR_ON     );
-        spec.addTransition( State.CONFIRM_HEATER_ON,  Event.HEATER_TEMP_RISE, null, State.ON                 );
-        spec.addTransition( State.ON,                 Event.HI_BATTERY_TEMP,  null, State.CONFIRM_SSR_OFF    );
-        spec.addTransition( State.ON,                 Event.HI_HEATER_TEMP,   null, State.CONFIRM_SSR_OFF    );
-        spec.addTransition( State.CONFIRM_SSR_OFF,    Event.OFF_SENSED,       this::on_ConfirmSSROff_OffSensed,     State.CONFIRM_HEATER_OFF );
-        spec.addTransition( State.CONFIRM_HEATER_OFF, Event.HEATER_TEMP_DROP, null, State.COOLING            );
-        spec.addTransition( State.CONFIRM_HEATER_OFF, Event.NO_TEMP_DROP,     this::on_ConfirmHeaterOff_NoTempDrop, State.COOLING            );
-        spec.addTransition( State.COOLING,            Event.COOLED,           null, State.OFF                );
-        spec.addTransition( State.CONFIRM_SSR_ON,     Event.RESET,            null, State.OFF                );
-        spec.addTransition( State.CONFIRM_HEATER_ON,  Event.RESET,            null, State.OFF                );
-        spec.addTransition( State.HEATER_COOLING,     Event.RESET,            null, State.OFF                );
-        spec.addTransition( State.ON,                 Event.RESET,            null, State.OFF                );
-        spec.addTransition( State.CONFIRM_HEATER_OFF, Event.RESET,            null, State.OFF                );
-        spec.addTransition( State.CONFIRM_SSR_OFF,    Event.RESET,            null, State.OFF                );
-        spec.addTransition( State.COOLING,            Event.RESET,            null, State.OFF                );
+        spec.addTransition( State.OFF,                Event.LO_BATTERY_TEMP,  this::on_Off_LowBatteryTemp,              State.CONFIRM_SSR_ON     );
+        spec.addTransition( State.CONFIRM_SSR_ON,     Event.ON_SENSED,        this::on_ConfirmSSROn_OnSensed,           State.CONFIRM_HEATER_ON  );
+        spec.addTransition( State.CONFIRM_HEATER_ON,  Event.NO_TEMP_RISE,     this::on_ConfirmHeaterOn_NoTempRise,      State.HEATER_COOLING     );
+        spec.addTransition( State.HEATER_COOLING,     Event.COOLED,           null,                                     State.CONFIRM_SSR_ON     );
+        spec.addTransition( State.CONFIRM_HEATER_ON,  Event.HEATER_TEMP_RISE, this::on_ConfirmHeaterOn_HeaterTempRise,  State.ON                 );
+        spec.addTransition( State.ON,                 Event.HI_BATTERY_TEMP,  null,                                     State.CONFIRM_SSR_OFF    );
+        spec.addTransition( State.ON,                 Event.HI_HEATER_TEMP,   null,                                     State.CONFIRM_SSR_OFF    );
+        spec.addTransition( State.CONFIRM_SSR_OFF,    Event.OFF_SENSED,       this::on_ConfirmSSROff_OffSensed,         State.CONFIRM_HEATER_OFF );
+        spec.addTransition( State.CONFIRM_HEATER_OFF, Event.HEATER_TEMP_DROP, this::on_ConfirmHeaterOff_HeaterTempDrop, State.COOLING            );
+        spec.addTransition( State.CONFIRM_HEATER_OFF, Event.NO_TEMP_DROP,     this::on_ConfirmHeaterOff_NoTempDrop,     State.COOLING            );
+        spec.addTransition( State.COOLING,            Event.COOLED,           null,                                     State.OFF                );
+        spec.addTransition( State.CONFIRM_SSR_ON,     Event.RESET,            null,                                     State.OFF                );
+        spec.addTransition( State.CONFIRM_HEATER_ON,  Event.RESET,            null,                                     State.OFF                );
+        spec.addTransition( State.HEATER_COOLING,     Event.RESET,            null,                                     State.OFF                );
+        spec.addTransition( State.ON,                 Event.RESET,            null,                                     State.OFF                );
+        spec.addTransition( State.CONFIRM_HEATER_OFF, Event.RESET,            null,                                     State.OFF                );
+        spec.addTransition( State.CONFIRM_SSR_OFF,    Event.RESET,            null,                                     State.OFF                );
+        spec.addTransition( State.COOLING,            Event.RESET,            null,                                     State.OFF                );
 
         if( !spec.isValid() ) {
-            LOGGER.log( Level.SEVERE, "Fatal error when constructing FSM\n" + spec.getErrorMessage() );
+            LOGGER.log( Level.SEVERE, "Fatal error when constructing normal heater controller FSM\n" + spec.getErrorMessage() );
             System.exit( 1 );
         }
 
