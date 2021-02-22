@@ -1,11 +1,15 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.util.AConfig;
+import com.dilatush.util.Haps;
 import com.dilatush.util.info.Info;
 import com.pi4j.io.gpio.*;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 
 import static com.dilatush.shedsolar.LightDetector.Mode;
@@ -30,8 +34,10 @@ public class HeaterControl {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
-    private final Config    config;      // our configuration...
-    private final ShedSolar shedSolar;   // our lord and master...
+    private final Config       config;      // our configuration...
+    private final ShedSolar    shedSolar;   // our lord and master...
+    private final Haps<Events> haps;        // our Haps...
+
 
     // our initialized I/O...
     private final GpioPinDigitalInput  ssrSense;
@@ -67,6 +73,7 @@ public class HeaterControl {
 
         // a shortcut to our lord and master...
         shedSolar = ShedSolar.instance;
+        haps = shedSolar.haps;
 
         // initialize the GPIO pins for the SSR, the SSR sense relay, and the heater on indicator LED...
         GpioController       controller     = ShedSolar.instance.getGPIO();
@@ -87,7 +94,6 @@ public class HeaterControl {
 
         // start up our period tick...
         ShedSolar.instance.scheduledExecutor.scheduleWithFixedDelay( this::tick, Duration.ZERO, Duration.ofMillis( config.tickTime ) );
-
     }
 
 
@@ -149,8 +155,32 @@ public class HeaterControl {
 
         // make our context and call our controller...
         HeaterControllerContext context = new HeaterControllerContext(
-                ssrSense, heaterPowerLED, heaterSSR, batteryTemp.getInfo(), heaterTemp.getInfo(), ambientTemp.getInfo(), loTemp, hiTemp );
+                this::isSSROutputSensed, this::heaterOn, this::heaterOff, batteryTemp.getInfo(),
+                heaterTemp.getInfo(), ambientTemp.getInfo(), loTemp, hiTemp );
         heaterController.tick( context );
+    }
+
+
+    private Instant heaterOnTime;
+
+    private void heaterOn() {
+        heaterOnTime = Instant.now(Clock.systemUTC() );
+        heaterSSR.low();
+        heaterPowerLED.low();
+        haps.post( Events.HEATER_ON, heaterOnTime );
+    }
+
+
+    private void heaterOff() {
+        Instant heaterOffTime = Instant.now( Clock.systemUTC() );
+        heaterSSR.high();
+        heaterPowerLED.high();
+        haps.post( Events.HEATER_OFF, Duration.between( heaterOnTime, heaterOffTime ) );
+    }
+
+
+    private boolean isSSROutputSensed() {
+        return ssrSense.isLow();
     }
 
 
@@ -159,15 +189,12 @@ public class HeaterControl {
      */
     public static class HeaterControllerContext {
         
-        /** The GPIO input pin, low when the mechanical "power sense" relay is energized by the SSR turning on. */
-        public final GpioPinDigitalInput  ssrSense;
-        
-        /** The GPIO output pin that when low turns on the heater power LED. */
-        public final GpioPinDigitalOutput heaterPowerLED;
-        
-        /** The GPIO output pin that when low turns on the heater power solid state relay (SSR). */
-        public final GpioPinDigitalOutput heaterSSR;
-        
+        public final Supplier<Boolean> isSSROutputSensed;
+
+        public final Runnable heaterOn;
+
+        public final Runnable heaterOff;
+
         /** The battery temperature in degrees Celcius. */
         public final float                batteryTemp;
 
@@ -185,12 +212,13 @@ public class HeaterControl {
 
 
         /** Create a new instance of this class. */
-        private HeaterControllerContext( final GpioPinDigitalInput _ssrSense, final GpioPinDigitalOutput _heaterPowerLED,
-                                        final GpioPinDigitalOutput _heaterSSR, final float _batteryTemp, final float _heaterTemp,
+        private HeaterControllerContext( final Supplier<Boolean> _isSSROutputSensed, final Runnable _heaterOn,
+                                        final Runnable _heaterOff, final float _batteryTemp, final float _heaterTemp,
                                         final float _ambientTemp, final float _loTemp, final float _hiTemp ) {
-            ssrSense = _ssrSense;
-            heaterPowerLED = _heaterPowerLED;
-            heaterSSR = _heaterSSR;
+
+            isSSROutputSensed = _isSSROutputSensed;
+            heaterOn = _heaterOn;
+            heaterOff = _heaterOff;
             batteryTemp = _batteryTemp;
             heaterTemp = _heaterTemp;
             ambientTemp = _ambientTemp;
