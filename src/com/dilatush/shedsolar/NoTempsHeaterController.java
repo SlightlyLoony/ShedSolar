@@ -88,7 +88,7 @@ public class NoTempsHeaterController implements HeaterController {
         LOGGER.finest( () -> "No-temps heater controller CONFIRM_SSR_ON:ON_SENSED" );
 
         // if our sense relay shows no power, send a Hap...
-        if( context.ssrSense.isHigh() )
+        if( !context.isSSROutputSensed.get() )
             ShedSolar.instance.haps.post( Events.POSSIBLE_SSR_OR_SENSE_RELAY_FAILURE );
     }
 
@@ -99,7 +99,7 @@ public class NoTempsHeaterController implements HeaterController {
         LOGGER.finest( () -> "No-temps heater controller CONFIRM_SSR_OFF:OFF_SENSED" );
 
         // if our sense relay shows power, send a Hap...
-        if( context.ssrSense.isHigh() )
+        if( context.isSSROutputSensed.get() )
             ShedSolar.instance.haps.post( Events.POSSIBLE_SSR_OR_SENSE_RELAY_FAILURE );
     }
 
@@ -110,8 +110,7 @@ public class NoTempsHeaterController implements HeaterController {
         LOGGER.finest( () -> "No-temps heater controller on entry to CONFIRM_SSR_ON" );
 
         // turn on the heater and the heater LED...
-        context.heaterSSR.low();
-        context.heaterPowerLED.low();
+        context.heaterOn.run();
 
         // set a timeout for 100 ms to check sense relay...
         _state.fsm.scheduleEvent( Event.ON_SENSED, Duration.ofMillis( 100 ) );
