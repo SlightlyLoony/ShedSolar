@@ -14,8 +14,9 @@ import java.util.logging.Logger;
 import static com.dilatush.shedsolar.HeaterControl.HeaterControllerContext;
 
 /**
- * Implements a {@link HeaterController} for the normal equipment circumstance: when both the heater temperature sensor and the battery temperature
- * sensor are working properly.
+ * Implements a {@link HeaterController} for the worst-case circumstance: we can read neither the battery temperature nor the heater output
+ * temperature.  This controller estimates both the heater on time and the heater off time by using calculations based on a thermal model of the
+ * battery box.  The parameters of this model must be measured (and configured) while the system is operational.
  *
  * @author Tom Dilatush  tom@dilatush.com
  */
@@ -26,17 +27,18 @@ public class NoTempsHeaterController implements HeaterController {
     private final FSM<State,Event>  fsm;           // the finite state machine at the heart of this class...
     private final Config            config;        // the configuration loaded from JavaScript...
 
-    private HeaterControllerContext context;       // the controller context as of the most recent tick...
+    private HeaterControllerContext context;       // the controller context as of the most recent tick or reset...
+    private double                  outsideTemp;   // in °C...
 
 
     // the states of our FSM...
     private enum State {
-        OFF, CONFIRM_SSR_ON, ON, CONFIRM_SSR_OFF, INIT }
+        OFF, CONFIRM_SSR_ON, ON, CONFIRM_SSR_OFF, WAIT_FOR_TRIGGER }
 
 
     // the events that drive our FSM...
     private enum Event {
-        TURN_ON, TURN_OFF, ON_SENSED, OFF_SENSED, RESET, START }
+        LOW_AMBIENT, TRIGGER, TURN_OFF, ON_SENSED, OFF_SENSED, RESET }
 
 
     /**
@@ -59,20 +61,47 @@ public class NoTempsHeaterController implements HeaterController {
     @Override
     public void tick( final HeaterControllerContext _context ) {
 
-        // save the context for use in events not triggered by tick()...
+        // save the context...
         context = _context;
 
-        // tell this thing to start up...
-        fsm.onEvent( Event.START );
+        // get the outside temperature...
+        double outsideTheBoxTemp;
+        if( context.ambientTemp.isInfoAvailable() )
+            outsideTheBoxTemp = context.ambientTemp.getInfo();
+        else if( context.outsideTemp.isInfoAvailable() )
+            outsideTheBoxTemp = context.outsideTemp.getInfo();
+        else {
+
+            /*
+             *  If we get here, we have a serious problem - we don't know the battery temperature, the heater output temperature, the ambient
+             *  temperature at the ShedSolar box, or the weather station's outside temperature.  All we can do, really, is scream for help.
+             *  Turning on the heater risks running the batteries too hot.
+             */
+            context.heaterOff.run();                                                   // make sure the heater is off; it's the safe thing to do...
+            ShedSolar.instance.haps.post( Events.NO_TEMPERATURE_OUTSIDE_THE_BOX );     // let the world know we're screwed...
+            return;                                                                    // skedaddle...
+        }
+
+        // if we have an ambient temperature lower than the low threshold, we've got an event...
+        outsideTemp = outsideTheBoxTemp;
+        if( outsideTheBoxTemp < context.loTemp )
+            fsm.onEvent( Event.LOW_AMBIENT );
     }
 
 
     /**
      * Called by {@link HeaterControl} to tell this heater controller to turn off the heater and heater LED, and return to initial state, ready for
      * reuse.
+     *
+     * @param _context The heater controller context.
      */
     @Override
-    public void reset() {
+    public void reset( final HeaterControllerContext _context ) {
+
+        // save the context...
+        context = _context;
+
+        // issue the reset...
         fsm.onEvent( Event.RESET );
     }
 
@@ -82,7 +111,7 @@ public class NoTempsHeaterController implements HeaterController {
     /*---------------------------*/
 
 
-    // on CONFIRM_SSR_ON:ON_SENSED -> CONFIRM_HEATER_ON...
+    // on CONFIRM_SSR_ON:ON_SENSED -> ON...
     private void on_ConfirmSSROn_OnSensed( final FSMTransition<State,Event> _transition ) {
 
         LOGGER.finest( () -> "No-temps heater controller CONFIRM_SSR_ON:ON_SENSED" );
@@ -93,7 +122,7 @@ public class NoTempsHeaterController implements HeaterController {
     }
 
 
-    // on CONFIRM_SSR_OFF:OFF_SENSED -> CONFIRM_HEATER_OFF...
+    // on CONFIRM_SSR_OFF:OFF_SENSED -> WAIT_FOR_TRIGGER...
     private void on_ConfirmSSROff_OffSensed( final FSMTransition<State,Event> _transition ) {
 
         LOGGER.finest( () -> "No-temps heater controller CONFIRM_SSR_OFF:OFF_SENSED" );
@@ -112,12 +141,25 @@ public class NoTempsHeaterController implements HeaterController {
         // turn on the heater and the heater LED...
         context.heaterOn.run();
 
-        // set a timeout for 100 ms to check sense relay...
+        // schedule a 100 ms check for sense relay...
         _state.fsm.scheduleEvent( Event.ON_SENSED, Duration.ofMillis( 100 ) );
 
-        // compute the time we need to stay on, and set a timeout for it...
+        /*
+         * These are the tricky bits for this heater controller.  We get here because the temperature outside the box is less than the low
+         * temperature threshold.  Here we estimate two things:
+         * 1.  How long we should run the heater to take the battery temperature to the high threshold (from the low threshold).
+         * 2.  How long we should wait, with the heater off, for the battery temperature to drop back down to the low threshold.
+         */
+
+        // estimate the time we need to keep the heater on, and schedule an event for it...
+        // note the "safety tweak", because we're taking the position that it's better for the batteries to be a bit warm than a bit cold...
         double onTimeSeconds = config.degreesPerSecond * (context.hiTemp - context.loTemp) * config.safetyTweak;
         _state.fsm.scheduleEvent( Event.TURN_OFF, Duration.ofMillis( Math.round( 1000 * onTimeSeconds ) ) );
+
+        // estimate how long we should wait (heater off) for the battery temperature to drop back to the low threshold,
+        // and schedule an event for that...
+        double offTimeSeconds = ThermalCalcs.t( context.loTemp, context.hiTemp, outsideTemp - context.hiTemp, config.k );
+        _state.fsm.scheduleEvent( Event.TRIGGER, Duration.ofMillis( Math.round( (onTimeSeconds + offTimeSeconds) * 1000 ) ) );
     }
 
 
@@ -125,6 +167,9 @@ public class NoTempsHeaterController implements HeaterController {
     private void onEntry_ConfirmSSROff( final FSMState<State,Event> _state ) {
 
         LOGGER.finest( () -> "No-temps heater controller on entry to CONFIRM_SSR_OFF" );
+
+        // turn the heater off...
+        context.heaterOff.run();
 
         // set a timeout for 100 ms to check sense relay...
         _state.fsm.scheduleEvent( Event.OFF_SENSED, Duration.ofMillis( 100 ) );
@@ -137,37 +182,18 @@ public class NoTempsHeaterController implements HeaterController {
         LOGGER.finest( () -> "No-temps heater controller on entry to OFF" );
 
         // turn off the SSR and the heater LED (matters for reset event)...
-        // if we didn't have a context, then they're already off...
-        if( context != null ) {
-            context.heaterSSR.high();
-            context.heaterPowerLED.high();
-        }
-
-        // get the outside temperature...
-        assert context != null;
-        double outsideTemp;
-        if( context.ambientTemp.isInfoAvailable() )
-            outsideTemp = context.ambientTemp.getInfo();
-        else if( context.outsideTemp.isInfoAvailable() )
-            outsideTemp = context.outsideTemp.getInfo();
-        else {
-
-        }
-
-        // calculate how long to keep the heater off...
-        double offTimeSeconds = ThermalCalcs.t( context.loTemp, context.hiTemp, outsideTemp - context.hiTemp, config.k );
-
+        context.heaterOff.run();
     }
 
 
     // on exit from ON...
+    @SuppressWarnings( "unused" )
     private void onExit_On( final FSMState<State,Event> _state ) {
 
         LOGGER.finest( () -> "No-temps heater controller on exit from ON" );
 
         // turn off the heater and LED...
-        context.heaterSSR.high();
-        context.heaterPowerLED.high();
+        context.heaterOff.run();
     }
 
 
@@ -188,13 +214,11 @@ public class NoTempsHeaterController implements HeaterController {
          */
         public double k;
 
-
         /**
          * The number of degrees per second of operation that the heater will raise the temperature of the batteries, as determined by direct
          * observation.  There is no default value; valid values are in the range (0..1].
          */
         public double degreesPerSecond;
-
 
         /**
          * The number to multiply the computed length of heater on time by, to provide a margin of safety on the high temperature side, as it is
@@ -206,20 +230,12 @@ public class NoTempsHeaterController implements HeaterController {
 
         @Override
         public void verify( final List<String> _messages ) {
-            validate( () -> (confirmOnDelta >= 5) && (confirmOnDelta <= 30), _messages,
-                    "No-temps heater controller confirm on delta temperature is out of range: " + confirmOnDelta );
-            validate( () -> (confirmOnTimeMS >= 10000) && (confirmOnTimeMS <= 600000), _messages,
-                    "No-temps heater controller confirm on time is out of range: " + confirmOnTimeMS );
-            validate( () -> (initialCooldownPeriodMS >= 10000) && (initialCooldownPeriodMS <= 600000), _messages,
-                    "No-temps heater controller initial cooldown period is out of range: " + initialCooldownPeriodMS );
-            validate( () -> (confirmOffDelta >= -30) && (confirmOffDelta <= -5), _messages,
-                    "No-temps heater controller confirm off delta temperature is out of range: " + confirmOffDelta );
-            validate( () -> (confirmOffTimeMS >= 10000) && (confirmOffTimeMS <= 600000), _messages,
-                    "No-temps heater controller confirm off time is out of range: " + confirmOffTimeMS );
-            validate( () -> (heaterTempLimit >= 30) && (heaterTempLimit <= 60), _messages,
-                    "No-temps heater controller heater temperature limit is out of range: " + heaterTempLimit );
-            validate( () -> (coolingTimeMS >= 60000) && (coolingTimeMS <= 600000), _messages,
-                    "No-temps heater controller cooling time is out of range: " + coolingTimeMS );
+            validate( () -> (k > 0) && (k <= 1), _messages,
+                    "No-temps heater controller k is out of range: " + k );
+            validate( () -> (degreesPerSecond > 0) && (degreesPerSecond < 1), _messages,
+                    "No-temps heater controller degrees per second is out of range: " + degreesPerSecond );
+            validate( () -> (safetyTweak >= 1) && (safetyTweak <= 1.25), _messages,
+                    "No-temps safety tweak is out of range: " + safetyTweak );
         }
     }
 
@@ -231,7 +247,7 @@ public class NoTempsHeaterController implements HeaterController {
      */
     private FSM<State,Event> createFSM() {
 
-        FSMSpec<State,Event> spec = new FSMSpec<>( State.INIT, Event.OFF_SENSED );
+        FSMSpec<State,Event> spec = new FSMSpec<>( State.OFF, Event.TRIGGER );
 
         spec.enableEventScheduling( ShedSolar.instance.scheduledExecutor );
 
@@ -241,15 +257,16 @@ public class NoTempsHeaterController implements HeaterController {
         spec.setStateOnEntryAction( State.CONFIRM_SSR_OFF, this::onEntry_ConfirmSSROff );
         spec.setStateOnEntryAction( State.OFF,             this::onEntry_Off           );
 
-        spec.setStateOnExitAction( State.ON, this::onExit_On );
-
-        spec.addTransition( State.OFF,                Event.TURN_ON,     null,                              State.CONFIRM_SSR_ON     );
+        spec.addTransition( State.OFF,                Event.LOW_AMBIENT, null,                              State.CONFIRM_SSR_ON     );
         spec.addTransition( State.CONFIRM_SSR_ON,     Event.ON_SENSED,   this::on_ConfirmSSROn_OnSensed,    State.ON                 );
+        spec.addTransition( State.CONFIRM_SSR_ON,     Event.TURN_OFF,    null,                              State.CONFIRM_SSR_OFF    );
         spec.addTransition( State.ON,                 Event.TURN_OFF,    null,                              State.CONFIRM_SSR_OFF    );
-        spec.addTransition( State.CONFIRM_SSR_OFF,    Event.OFF_SENSED,  this::on_ConfirmSSROff_OffSensed,  State.OFF                );
+        spec.addTransition( State.CONFIRM_SSR_OFF,    Event.OFF_SENSED,  this::on_ConfirmSSROff_OffSensed,  State.WAIT_FOR_TRIGGER   );
+        spec.addTransition( State.WAIT_FOR_TRIGGER,   Event.TRIGGER,     null,                              State.OFF                );
         spec.addTransition( State.CONFIRM_SSR_ON,     Event.RESET,       null,                              State.OFF                );
         spec.addTransition( State.ON,                 Event.RESET,       null,                              State.OFF                );
         spec.addTransition( State.CONFIRM_SSR_OFF,    Event.RESET,       null,                              State.OFF                );
+        spec.addTransition( State.WAIT_FOR_TRIGGER,   Event.RESET,       null,                              State.OFF                );
 
         if( !spec.isValid() ) {
             LOGGER.log( Level.SEVERE, "Fatal error when constructing no-temps heater controller FSM\n" + spec.getErrorMessage() );

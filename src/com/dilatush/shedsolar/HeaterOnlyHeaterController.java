@@ -71,8 +71,8 @@ public class HeaterOnlyHeaterController implements HeaterController {
         // save the context for use in events not triggered by tick()...
         context = _context;
 
-        // issue low and high battery temp events if warranted...
-        if( _context.batteryTemp < _context.loTemp )
+        // issue low battery temp events using the heater thermocouple to measure (will only be useful when heater is off, obviously)...
+        if( _context.heaterTemp < _context.loTemp )
             fsm.onEvent( Event.LO_BATTERY_TEMP );
 
         // issue high heater temp, if warranted...
@@ -96,9 +96,16 @@ public class HeaterOnlyHeaterController implements HeaterController {
     /**
      * Called by {@link HeaterControl} to tell this heater controller to turn off the heater and heater LED, and return to initial state, ready for
      * reuse.
+     *
+     * @param _context The heater controller context.
      */
     @Override
-    public void reset() {
+    public void reset( final HeaterControllerContext _context ) {
+
+        // save the context...
+        context = _context;
+
+        // issue the reset...
         fsm.onEvent( Event.RESET );
     }
 
@@ -123,7 +130,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Heater-only heater controller CONFIRM_SSR_ON:ON_SENSED" );
 
         // read our sense relay and stuff the result away for later use...
-        senseRelay = context.ssrSense.isLow();
+        senseRelay = context.isSSROutputSensed.get();
 
         // record the starting time, for use in calculating when to turn it off...
         turnedOnTime = Instant.now( Clock.systemUTC() );
@@ -139,8 +146,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Heater-only heater controller CONFIRM_HEATER_ON:NO_TEMP_RISE" );
 
         // turn off the heater, as we're gonna cool down for a while...
-        context.heaterSSR.high();
-        context.heaterPowerLED.high();
+        context.heaterOff.run();
 
         // set a timeout for a cooldown period, more time for more tries...
         turnOnTries = Math.max( 5, turnOnTries + 1 );
@@ -168,7 +174,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Heater-only heater controller CONFIRM_SSR_OFF:OFF_SENSED" );
 
         // read our sense relay and stuff the result away for later use...
-        senseRelay = context.ssrSense.isLow();
+        senseRelay = context.isSSROutputSensed.get();
 
         // set a timeout for the configured time we'll wait for a temperature drop...
         _transition.setTimeout( Event.NO_TEMP_DROP, Duration.ofMillis( config.confirmOffTimeMS ) );
@@ -206,8 +212,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
         startingTemp = context.heaterTemp;
 
         // turn on the heater and the heater LED...
-        context.heaterSSR.low();
-        context.heaterPowerLED.low();
+        context.heaterOn.run();
 
         // set a timeout for 100 ms to check sense relay...
         _state.fsm.scheduleEvent( Event.ON_SENSED, Duration.ofMillis( 100 ) );
@@ -240,11 +245,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Heater-only heater controller on entry to OFF" );
 
         // turn off the SSR and the heater LED (matters for reset event)...
-        // if we didn't have a context, then they're already off...
-        if( context != null ) {
-            context.heaterSSR.high();
-            context.heaterPowerLED.high();
-        }
+        context.heaterOff.run();
     }
 
 
@@ -274,7 +275,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
 
         // calculate how much longer we want the heater to stay on...
         long additionalTimeOnMS = Math.max( 0,                                                             // make sure the result is non-negative...
-                Math.round( config.minutesPerDeltaDegree * delta * 60000D )                                // the total heater on time...
+                Math.round( config.degreesPerSecond * delta * 1000D )                                      // the total heater on time...
                         - Duration.between( turnedOnTime, Instant.now( Clock.systemUTC() ) ).toMillis()    // less the time it's already been on...
                 );
 
@@ -292,8 +293,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
         startingTemp = context.heaterTemp;
 
         // turn off the heater and LED...
-        context.heaterSSR.high();
-        context.heaterPowerLED.high();
+        context.heaterOff.run();
     }
 
 
@@ -353,10 +353,10 @@ public class HeaterOnlyHeaterController implements HeaterController {
         public long coolingTimeMS = 180000;
 
         /**
-         * The time, in minutes, to run the heater per degree of temperature difference between the battery temperature and the outside temperature.
-         * The default value is 0.2; valid values are in the range [0.01..1].
+         * The number of degrees per second of operation that the heater will raise the temperature of the batteries, as determined by direct
+         * observation.  There is no default value; valid values are in the range (0..1].
          */
-        public float minutesPerDeltaDegree = 0.2f;
+        public double degreesPerSecond;
 
 
         @Override
@@ -375,8 +375,8 @@ public class HeaterOnlyHeaterController implements HeaterController {
                     "Heater-only heater controller heater temperature limit is out of range: " + heaterTempLimit );
             validate( () -> (coolingTimeMS >= 60000) && (coolingTimeMS <= 600000), _messages,
                     "Heater-only heater controller cooling time is out of range: " + coolingTimeMS );
-            validate( () -> (minutesPerDeltaDegree >= 0.01) && (minutesPerDeltaDegree <= 1.0), _messages,
-                    "Heater-only minutes per delta degree is out of range: " + minutesPerDeltaDegree );
+            validate( () -> (degreesPerSecond > 0) && (degreesPerSecond <= 1.0), _messages,
+                    "Heater-only degrees per second is out of range: " + degreesPerSecond );
         }
     }
 

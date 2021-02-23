@@ -102,7 +102,7 @@ function init( config ) {
     // The normal interval between temperature readings as a duration.  Valid values are in the range of [5 seconds .. 60 seconds].  Because the
     // sensor noise has an observed periodicity of about 10 seconds, this value SHOULD be relatively prime to 10 seconds.  The default value is
     // 7 seconds.
-    config.tempReader.normalInterval = Duration.ofSeconds( 7 );
+    config.tempReader.normalInterval = Duration.ofSeconds( 3 );
 
     // The number of samples (history) to keep in the filter.  Valid values are 2 or greater.
     config.tempReader.noiseFilter.numSamples = 41;
@@ -304,9 +304,25 @@ function init( config ) {
     // in the range [60000..600000].
     config.heaterControl.heaterOnly.coolingTimeMS = 180000;
 
-    // The time, in minutes, to run the heater per degree of temperature difference between the battery temperature and the outside temperature.
-    // The default value is 0.2; valid values are in the range [0.01..1].
-    config.heaterControl.minutesPerDeltaDegree = 0.2;
+    // The number of degrees per second of operation that the heater will raise the temperature of the batteries, as determined by direct
+    // observation.  There is no default value; valid values are in the range (0..1].
+    config.heaterControl.heaterOnly.degreesPerSecond = 0.05;
+
+
+    /*--- no-temps heater controller configuration ---*/
+
+    // The constant K for the thermal calculations in {@link ThermalCalcs}, as determined by direct observation.  There is no default value;
+    // valid values are in the range (0..1].
+    config.heaterControl.noTemps.k = 0.0004;
+
+    // The number of degrees per second of operation that the heater will raise the temperature of the batteries, as determined by direct
+    // observation.  There is no default value; valid values are in the range (0..1].
+    config.heaterControl.noTemps.degreesPerSecond = 0.05;
+
+    // The number to multiply the computed length of heater on time by, to provide a margin of safety on the high temperature side, as it is
+    // better for the battery to be slightly warmer than the target temperatures than it is for it to be cooler.  The default value is 1.0;
+    // valid values are in the range [1..1.25].
+    config.heaterControl.noTemps.safetyTweak = 1.03;
 
 
     /*

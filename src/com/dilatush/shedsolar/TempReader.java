@@ -125,8 +125,10 @@ public class TempReader {
         batteryRawTE = TestManager.getInstance().register( "batteryRaw" );
         heaterRawTE  = TestManager.getInstance().register( "heaterRaw"  );
 
-        // schedule our temperature reader...
-        canceller = ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate( this::tempTask, Duration.ZERO, config.startupInterval );
+        // schedule our temperature reader to run under the executor, so we don't bog down the scheduler...
+        canceller = ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate( () -> {
+            ShedSolar.instance.executor.submit( this::tempTask );
+        }, Duration.ZERO, config.startupInterval );
     }
 
 

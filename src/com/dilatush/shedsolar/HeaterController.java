@@ -21,6 +21,8 @@ public interface HeaterController {
     /**
      * Called by {@link HeaterControl} to tell this heater controller to turn off the heater and heater LED, and return to initial state, ready for
      * reuse.
+     *
+     * @param _context The heater controller context.
      */
-    void reset();
+    void reset( final HeaterControllerContext _context );
 }

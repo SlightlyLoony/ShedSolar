@@ -30,8 +30,6 @@ import static com.dilatush.shedsolar.LightDetector.Mode.LIGHT;
  */
 public class HeaterControl {
 
-    // TODO: add publication of heater on/off, problems...
-
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
     private final Config       config;      // our configuration...
@@ -87,10 +85,10 @@ public class HeaterControl {
         startedUp = false;
 
         // instantiate our controllers...
-        normalHeaterController      = new NormalHeaterController(      config.normal );
+        normalHeaterController      = new NormalHeaterController(      config.normal      );
         batteryOnlyHeaterController = new BatteryOnlyHeaterController( config.batteryOnly );
-        heaterOnlyHeaterController  = new HeaterOnlyHeaterController(  config.heaterOnly );
-        noTempsHeaterController     = new NoTempsHeaterController(     config.noTemps );
+        heaterOnlyHeaterController  = new HeaterOnlyHeaterController(  config.heaterOnly  );
+        noTempsHeaterController     = new NoTempsHeaterController(     config.noTemps     );
 
         // start up our period tick...
         ShedSolar.instance.scheduledExecutor.scheduleWithFixedDelay( this::tick, Duration.ZERO, Duration.ofMillis( config.tickTime ) );
@@ -118,7 +116,7 @@ public class HeaterControl {
         if( batteryTemp.isInfoAvailable() && heaterTemp.isInfoAvailable() ) { // the normal case...
             if( !(heaterController instanceof NormalHeaterController) ) {
                 if( heaterController != null)
-                    heaterController.reset();
+                    reset();
                 heaterController = normalHeaterController;
                 LOGGER.info( "Heater control switched to normal heater controller" );
             }
@@ -126,7 +124,7 @@ public class HeaterControl {
         else if( batteryTemp.isInfoAvailable() ) {
             if( !(heaterController instanceof BatteryOnlyHeaterController) ) {
                 if( heaterController != null)
-                    heaterController.reset();
+                    reset();
                 LOGGER.info( "Heater control switched to battery-temperature-only heater controller" );
                 heaterController = batteryOnlyHeaterController;
             }
@@ -134,7 +132,7 @@ public class HeaterControl {
         else if( heaterTemp.isInfoAvailable() ) {
             if( !(heaterController instanceof HeaterOnlyHeaterController) ) {
                 if( heaterController != null)
-                    heaterController.reset();
+                    reset();
                 LOGGER.info( "Heater control switched to heater-temperature-only heater controller" );
                 heaterController = heaterOnlyHeaterController;
             }
@@ -142,7 +140,7 @@ public class HeaterControl {
         else {
             if( !(heaterController instanceof NoTempsHeaterController) ) {
                 if( heaterController != null)
-                    heaterController.reset();
+                    reset();
                 LOGGER.info( "Heater control switched to no-temperature heater controller" );
                 heaterController = noTempsHeaterController;
             }
@@ -156,13 +154,31 @@ public class HeaterControl {
         // make our context and call our controller...
         HeaterControllerContext context = new HeaterControllerContext(
                 this::isSSROutputSensed, this::heaterOn, this::heaterOff, batteryTemp.getInfo(),
-                heaterTemp.getInfo(), ambientTemp.getInfo(), loTemp, hiTemp );
+                heaterTemp.getInfo(), ambientTemp, shedSolar.outsideTemperature, loTemp, hiTemp );
         heaterController.tick( context );
     }
 
 
+    /**
+     * Issue a reset to the currently running controller...
+     */
+    private void reset() {
+
+        // make our context (temperatures are irrelevant for reset) and call our controller...
+        HeaterControllerContext context = new HeaterControllerContext(
+                this::isSSROutputSensed, this::heaterOn, this::heaterOff,
+                0, 0, null, null, 0, 0 );
+        heaterController.reset( context );
+    }
+
+
+    // the last time we turned on the heater...
     private Instant heaterOnTime;
 
+
+    /**
+     * Turn on the heater and the heater LED.
+     */
     private void heaterOn() {
         heaterOnTime = Instant.now(Clock.systemUTC() );
         heaterSSR.low();
@@ -171,6 +187,9 @@ public class HeaterControl {
     }
 
 
+    /**
+     * Turn off the heater and the heater LED.
+     */
     private void heaterOff() {
         Instant heaterOffTime = Instant.now( Clock.systemUTC() );
         heaterSSR.high();
@@ -179,6 +198,11 @@ public class HeaterControl {
     }
 
 
+    /**
+     * Return {@code true} if the sense relay has detected that the solid state relay (SSR) is on.
+     *
+     * @return {@code true} if the sense relay has detected that the solid state relay (SSR) is on
+     */
     private boolean isSSROutputSensed() {
         return ssrSense.isLow();
     }
@@ -188,11 +212,14 @@ public class HeaterControl {
      * The context for a tick.
      */
     public static class HeaterControllerContext {
-        
+
+        /** {@code Supplier&lt;Boolean&gt;} that returns {@code true} if the sense relay has detected that the SSR is on. */
         public final Supplier<Boolean> isSSROutputSensed;
 
+        /** {@code Runnable} that turns on the heater and the heater LED. */
         public final Runnable heaterOn;
 
+        /** {@code Runnable} that turns off the heater and the heater LED. */
         public final Runnable heaterOff;
 
         /** The battery temperature in degrees Celcius. */
@@ -202,7 +229,10 @@ public class HeaterControl {
         public final float                heaterTemp;
 
         /** The ambient temperature in degrees Celcius. */
-        public final float                ambientTemp;
+        public final Info<Float>          ambientTemp;
+
+        /** The outside temperature in degrees Celcius */
+        public final Info<Float>          outsideTemp;
 
         /** The lowest target battery temperature in degrees Celcius. */
         public final float                loTemp;
@@ -214,7 +244,7 @@ public class HeaterControl {
         /** Create a new instance of this class. */
         private HeaterControllerContext( final Supplier<Boolean> _isSSROutputSensed, final Runnable _heaterOn,
                                         final Runnable _heaterOff, final float _batteryTemp, final float _heaterTemp,
-                                        final float _ambientTemp, final float _loTemp, final float _hiTemp ) {
+                                         final Info<Float> _ambientTemp, final Info<Float> _outsideTemp, final float _loTemp, final float _hiTemp ) {
 
             isSSROutputSensed = _isSSROutputSensed;
             heaterOn = _heaterOn;
@@ -222,12 +252,16 @@ public class HeaterControl {
             batteryTemp = _batteryTemp;
             heaterTemp = _heaterTemp;
             ambientTemp = _ambientTemp;
+            outsideTemp = _outsideTemp;
             loTemp = _loTemp;
             hiTemp = _hiTemp;
         }
     }
 
 
+    /**
+     * The configuration for this class.
+     */
     public static class Config extends AConfig {
 
         /**
@@ -263,13 +297,13 @@ public class HeaterControl {
         /** Normal heater controller configuration. */
         public NormalHeaterController.Config      normal;
 
-        /** Battery-temperatures-only heater controller configuration. */
+        /** Battery-temperature-only heater controller configuration. */
         public BatteryOnlyHeaterController.Config batteryOnly;
 
-        /** H */
+        /** Heater-temperature-only heater controller configuration.  */
         public HeaterOnlyHeaterController.Config  heaterOnly;
 
-        /**  */
+        /** No-temperatures heater controller configuration.  */
         public NoTempsHeaterController.Config     noTemps;
 
         

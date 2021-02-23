@@ -63,7 +63,7 @@ public class NormalHeaterController implements HeaterController {
     @Override
     public void tick( final HeaterControllerContext _context ) {
 
-        // save the context for use in events not triggered by tick()...
+        // save the context...
         context = _context;
 
         // issue low and high battery temp events if warranted...
@@ -93,9 +93,16 @@ public class NormalHeaterController implements HeaterController {
     /**
      * Called by {@link HeaterControl} to tell this heater controller to turn off the heater and heater LED, and return to initial state, ready for
      * reuse.
+     *
+     * @param _context The heater controller context.
      */
     @Override
-    public void reset() {
+    public void reset( final HeaterControllerContext _context ) {
+
+        // save the context...
+        context = _context;
+
+        // issue the reset...
         fsm.onEvent( Event.RESET );
     }
 
@@ -103,6 +110,7 @@ public class NormalHeaterController implements HeaterController {
     /*---------------------------*/
     /*   F S M   A c t i o n s   */
     /*---------------------------*/
+
 
     // on OFF:LOW_BATTERY_TEMP -> CONFIRM_SSR_ON...
     private void on_Off_LowBatteryTemp( final FSMTransition<State,Event> _transition ) {
@@ -120,7 +128,7 @@ public class NormalHeaterController implements HeaterController {
         LOGGER.finest( () -> "Normal heater controller CONFIRM_SSR_ON:ON_SENSED" );
 
         // read our sense relay and stuff the result away for later use...
-        senseRelay = context.ssrSense.isLow();
+        senseRelay = context.isSSROutputSensed.get();
 
         // set a timeout for the configured time we'll wait for a temperature rise...
         _transition.setTimeout( Event.NO_TEMP_RISE, Duration.ofMillis( config.confirmOnTimeMS ) );
@@ -133,8 +141,7 @@ public class NormalHeaterController implements HeaterController {
         LOGGER.finest( () -> "Normal heater controller CONFIRM_HEATER_ON:NO_TEMP_RISE" );
 
         // turn off the heater, as we're gonna cool down for a while...
-        context.heaterSSR.high();
-        context.heaterPowerLED.high();
+        context.heaterOff.run();
 
         // set a timeout for a cooldown period, more time for more tries...
         turnOnTries = Math.max( 5, turnOnTries + 1 );
@@ -162,7 +169,7 @@ public class NormalHeaterController implements HeaterController {
         LOGGER.finest( () -> "Normal heater controller CONFIRM_SSR_OFF:OFF_SENSED" );
 
         // read our sense relay and stuff the result away for later use...
-        senseRelay = context.ssrSense.isLow();
+        senseRelay = context.isSSROutputSensed.get();
 
         // set a timeout for the configured time we'll wait for a temperature drop...
         _transition.setTimeout( Event.NO_TEMP_DROP, Duration.ofMillis( config.confirmOffTimeMS ) );
@@ -200,8 +207,7 @@ public class NormalHeaterController implements HeaterController {
         startingTemp = context.heaterTemp;
 
         // turn on the heater and the heater LED...
-        context.heaterSSR.low();
-        context.heaterPowerLED.low();
+        context.heaterOn.run();
 
         // set a timeout for 100 ms to check sense relay...
         _state.fsm.scheduleEvent( Event.ON_SENSED, Duration.ofMillis( 100 ) );
@@ -234,11 +240,7 @@ public class NormalHeaterController implements HeaterController {
         LOGGER.finest( () -> "Normal heater controller on entry to OFF" );
 
         // turn off the SSR and the heater LED (matters for reset event)...
-        // if we didn't have a context, then they're already off...
-        if( context != null ) {
-            context.heaterSSR.high();
-            context.heaterPowerLED.high();
-        }
+        context.heaterOff.run();
     }
 
 
@@ -251,8 +253,7 @@ public class NormalHeaterController implements HeaterController {
         startingTemp = context.heaterTemp;
 
         // turn off the heater and LED...
-        context.heaterSSR.high();
-        context.heaterPowerLED.high();
+        context.heaterOff.run();
     }
 
 
@@ -263,7 +264,7 @@ public class NormalHeaterController implements HeaterController {
 
 
     /**
-     * The configuration for this class, normally from JavaScript.
+     * The configuration for this class, normally specified from JavaScript.
      */
     public static class Config extends AConfig {
 
