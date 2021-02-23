@@ -128,7 +128,7 @@ public class LightDetector {
 
     // state change listener...
     private void stateChange( final State _state ) {
-        LOGGER.finer( "Production Detector state changed to " + _state );
+        LOGGER.finer( "Light Detector state changed to " + _state );
     }
 
 

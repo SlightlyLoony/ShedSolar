@@ -290,7 +290,7 @@ public class TempReader {
         public Duration startupInterval = Duration.ofMillis( 250 );
 
         /**
-         * The normal interval between temperature readings as a duration.  Valid values are in the range of [5 seconds .. 60 seconds].  Because the
+         * The normal interval between temperature readings as a duration.  Valid values are in the range of [3 seconds .. 60 seconds].  Because the
          * sensor noise has an observed periodicity of about 10 seconds, this value <i>should</i> be relatively prime to 10 seconds.
          */
         public Duration normalInterval = Duration.ofSeconds( 7 );
@@ -307,13 +307,13 @@ public class TempReader {
         @Override
         public void verify( final List<String> _messages ) {
             validate( () -> ((startupInterval != null)
-                            && (Duration.ofMillis( 100 ).compareTo( startupInterval ) < 0)
-                            && (Duration.ofMinutes( 10 ).compareTo( startupInterval ) > 0) ), _messages,
+                            && (Duration.ofMillis( 100 ).compareTo( startupInterval ) <= 0)
+                            && (Duration.ofMinutes( 10 ).compareTo( startupInterval ) >= 0) ), _messages,
                     "Temperature Reader startup interval out of range: " + startupInterval.toMillis() + "ms" );
             validate( () -> ((normalInterval != null)
-                            && (Duration.ofSeconds( 5  ).compareTo( normalInterval ) < 0)
-                            && (Duration.ofMinutes( 60 ).compareTo( normalInterval ) > 0) ), _messages,
-                    "Temperature Reader startup interval out of range: " + normalInterval.toMillis() + "ms" );
+                            && (Duration.ofSeconds( 3  ).compareTo( normalInterval ) <= 0)
+                            && (Duration.ofMinutes( 60 ).compareTo( normalInterval ) >= 0) ), _messages,
+                    "Temperature Reader normal interval out of range: " + normalInterval.toMillis() + "ms" );
             noiseFilter.verify( _messages );
         }
     }

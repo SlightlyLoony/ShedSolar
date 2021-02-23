@@ -265,6 +265,17 @@ public class HeaterControl {
     public static class Config extends AConfig {
 
         /**
+         * Create a new instance of this class.
+         */
+        public Config() {
+            normal      = new NormalHeaterController.Config();
+            batteryOnly = new BatteryOnlyHeaterController.Config();
+            heaterOnly  = new HeaterOnlyHeaterController.Config();
+            noTemps     = new NoTempsHeaterController.Config();
+        }
+
+
+        /**
          * The time (in milliseconds) between "ticks" of the heater control state machine.  This value must be in the range [1,000..15,000]
          * milliseconds, and the default value is 5,000 milliseconds (five seconds).
          */

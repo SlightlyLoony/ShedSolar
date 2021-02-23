@@ -210,11 +210,13 @@ function init( config ) {
 
     // The lowest battery temperature (in degrees Celcius) allowed when in light mode.  This value must be in the range [0..40], and it must
     // be less than lightHighTemp and greater than darkLowTemp.  Its default value is 25C.
-    config.heaterControl.lightLowTemp = 25;
+    // config.heaterControl.lightLowTemp = 25;
+    config.heaterControl.lightLowTemp = 30;
 
     // The highest battery temperature (in degrees Celcius) allowed when in light mode.  This value must be in the range [0..40], and it must
     // be greater than lightLowTemp and greater than darkHighTemp.  It's default value is 30C.
-    config.heaterControl.lightHighTemp = 30;
+//    config.heaterControl.lightHighTemp = 30;
+    config.heaterControl.lightHighTemp = 35;
 
     /*--- normal heater controller configuration ---*/
 
