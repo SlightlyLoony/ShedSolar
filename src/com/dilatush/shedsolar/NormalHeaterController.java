@@ -5,6 +5,7 @@ import com.dilatush.util.fsm.FSM;
 import com.dilatush.util.fsm.FSMSpec;
 import com.dilatush.util.fsm.FSMState;
 import com.dilatush.util.fsm.FSMTransition;
+import com.dilatush.util.fsm.events.FSMEvent;
 
 import java.time.Duration;
 import java.util.List;
@@ -63,29 +64,35 @@ public class NormalHeaterController implements HeaterController {
     @Override
     public void tick( final HeaterControllerContext _context ) {
 
-        // save the context...
-        context = _context;
+        try {
 
-        // issue low and high battery temp events if warranted...
-        if( _context.batteryTemp < _context.loTemp )
-            fsm.onEvent( Event.LO_BATTERY_TEMP );
-        if( _context.batteryTemp > _context.hiTemp )
-            fsm.onEvent( Event.HI_BATTERY_TEMP );
+            // save the context...
+            context = _context;
 
-        // issue high heater temp, if warranted...
-        if( _context.heaterTemp > config.heaterTempLimit )
-            fsm.onEvent( Event.HI_HEATER_TEMP );
+            // issue low and high battery temp events if warranted...
+            if( _context.batteryTemp.getInfo() < _context.loTemp )
+                fsm.onEvent( Event.LO_BATTERY_TEMP );
+            if( _context.batteryTemp.getInfo() > _context.hiTemp )
+                fsm.onEvent( Event.HI_BATTERY_TEMP );
 
-        // if we're in confirming heater on state, see if we've risen enough...
-        if( fsm.getStateEnum() == State.CONFIRM_HEATER_ON ) {
-            if( _context.heaterTemp > (startingTemp + config.confirmOnDelta ) )
-                fsm.onEvent( Event.HEATER_TEMP_RISE );
+            // issue high heater temp, if warranted...
+            if( _context.heaterTemp.getInfo() > config.heaterTempLimit )
+                fsm.onEvent( Event.HI_HEATER_TEMP );
+
+            // if we're in confirming heater on state, see if we've risen enough...
+            if( fsm.getStateEnum() == State.CONFIRM_HEATER_ON ) {
+                if( _context.heaterTemp.getInfo() > (startingTemp + config.confirmOnDelta) )
+                    fsm.onEvent( Event.HEATER_TEMP_RISE );
+            }
+
+            // if we're in confirming heater off state, see if we've dropped enough...
+            if( fsm.getStateEnum() == State.CONFIRM_HEATER_OFF ) {
+                if( _context.heaterTemp.getInfo() < (startingTemp + config.confirmOffDelta) )
+                    fsm.onEvent( Event.HEATER_TEMP_DROP );
+            }
         }
-
-        // if we're in confirming heater off state, see if we've dropped enough...
-        if( fsm.getStateEnum() == State.CONFIRM_HEATER_OFF ) {
-            if( _context.heaterTemp < (startingTemp + config.confirmOffDelta ) )
-                fsm.onEvent( Event.HEATER_TEMP_DROP );
+        catch( final Exception _e ) {
+            LOGGER.log( Level.SEVERE, "Exception caught in tick()", _e );
         }
     }
 
@@ -144,7 +151,7 @@ public class NormalHeaterController implements HeaterController {
         context.heaterOff.run();
 
         // set a timeout for a cooldown period, more time for more tries...
-        turnOnTries = Math.max( 5, turnOnTries + 1 );
+        turnOnTries = Math.min( 5, turnOnTries + 1 );
         _transition.setTimeout( Event.COOLED, Duration.ofMillis( config.initialCooldownPeriodMS * turnOnTries ) );
 
         // if we've tried more than 5 times, we may have a dead SSR or a dead heater - send a Hap to that effect...
@@ -204,7 +211,7 @@ public class NormalHeaterController implements HeaterController {
         LOGGER.finest( () -> "Normal heater controller on entry to CONFIRM_SSR_ON" );
 
         // record our starting temperature (so we can sense the temperature rise)...
-        startingTemp = context.heaterTemp;
+        startingTemp = context.heaterTemp.getInfo();
 
         // turn on the heater and the heater LED...
         context.heaterOn.run();
@@ -250,7 +257,7 @@ public class NormalHeaterController implements HeaterController {
         LOGGER.finest( () -> "Normal heater controller on exit from ON" );
 
         // record the starting temperature (so we can sense the temperature drop)...
-        startingTemp = context.heaterTemp;
+        startingTemp = context.heaterTemp.getInfo();
 
         // turn off the heater and LED...
         context.heaterOff.run();
@@ -259,7 +266,13 @@ public class NormalHeaterController implements HeaterController {
 
     // on state change...
     private void stateChange( final State _state ) {
-        LOGGER.finest( "Normal heater controller changed state to: " + _state );
+        LOGGER.finest( () -> "Normal heater controller changed state to: " + _state );
+    }
+
+
+    // on event...
+    private void event( final FSMEvent<Event> _event ) {
+        LOGGER.finest( () -> "Normal heater controller event: " + _event.toString() );
     }
 
 
@@ -302,9 +315,9 @@ public class NormalHeaterController implements HeaterController {
 
         /**
          * The maximum temperature (in °C), sensed by the heater output thermocouple, to allow while the heater is on.  If the temperature rises
-         * above this level, the heater will be shut off.  The default temperature is 50°C; valid values are in the range [30..60].
+         * above this level, the heater will be shut off.  The default temperature is 80°C; valid values are in the range [30..100].
          */
-        public float heaterTempLimit = 50;
+        public float heaterTempLimit = 80;
 
         /**
          * The time, in milliseconds, to cool down the heater after turning it off.  The default is 180000 (3 minutes); valid values are
@@ -325,7 +338,7 @@ public class NormalHeaterController implements HeaterController {
                     "Normal heater controller confirm off delta temperature is out of range: " + confirmOffDelta );
             validate( () -> (confirmOffTimeMS >= 10000) && (confirmOffTimeMS <= 600000), _messages,
                     "Normal heater controller confirm off time is out of range: " + confirmOffTimeMS );
-            validate( () -> (heaterTempLimit >= 30) && (heaterTempLimit <= 60), _messages,
+            validate( () -> (heaterTempLimit >= 30) && (heaterTempLimit <= 100), _messages,
                     "Normal heater controller heater temperature limit is out of range: " + heaterTempLimit );
             validate( () -> (coolingTimeMS >= 60000) && (coolingTimeMS <= 600000), _messages,
                     "Normal heater controller cooling time is out of range: " + coolingTimeMS );
@@ -345,6 +358,7 @@ public class NormalHeaterController implements HeaterController {
         spec.enableEventScheduling( ShedSolar.instance.scheduledExecutor );
 
         spec.setStateChangeListener( this::stateChange );
+        spec.setEventListener( this::event );
 
         spec.setStateOnEntryAction( State.CONFIRM_SSR_ON,  this::onEntry_ConfirmSSROn  );
         spec.setStateOnEntryAction( State.CONFIRM_SSR_OFF, this::onEntry_ConfirmSSROff );

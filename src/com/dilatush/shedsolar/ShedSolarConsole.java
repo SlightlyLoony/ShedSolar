@@ -53,7 +53,8 @@ public class ShedSolarConsole extends CommandProcessorConsoleProvider {
     private String getTemp( final Info<Float> _temp ) {
         if( _temp.isInfoAvailable() ) {
             Info<Float> info = _temp.getInfoSource();
-            return tempFormatter.format( Conversions.fromCtoF( info.getInfo() ) ) + "°F (" + getTime( info.getInfoTimestamp() ) + ")";
+            return tempFormatter.format( Conversions.fromCtoF( info.getInfo() ) ) + "°F ("
+                    + tempFormatter.format( info.getInfo() ) + "°C) at "+ getTime( info.getInfoTimestamp() );
         }
         else
             return "?";

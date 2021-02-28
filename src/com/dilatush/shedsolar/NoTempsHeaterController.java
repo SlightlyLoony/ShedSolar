@@ -5,6 +5,7 @@ import com.dilatush.util.fsm.FSM;
 import com.dilatush.util.fsm.FSMSpec;
 import com.dilatush.util.fsm.FSMState;
 import com.dilatush.util.fsm.FSMTransition;
+import com.dilatush.util.fsm.events.FSMEvent;
 
 import java.time.Duration;
 import java.util.List;
@@ -203,6 +204,12 @@ public class NoTempsHeaterController implements HeaterController {
     }
 
 
+    // on event...
+    private void event( final FSMEvent<Event> _event ) {
+        LOGGER.finest( () -> "No-temps heater controller event: " + _event.toString() );
+    }
+
+
     /**
      * The configuration for this class, normally from JavaScript.
      */
@@ -252,6 +259,7 @@ public class NoTempsHeaterController implements HeaterController {
         spec.enableEventScheduling( ShedSolar.instance.scheduledExecutor );
 
         spec.setStateChangeListener( this::stateChange );
+        spec.setEventListener( this::event );
 
         spec.setStateOnEntryAction( State.CONFIRM_SSR_ON,  this::onEntry_ConfirmSSROn  );
         spec.setStateOnEntryAction( State.CONFIRM_SSR_OFF, this::onEntry_ConfirmSSROff );

@@ -211,12 +211,12 @@ function init( config ) {
     // The lowest battery temperature (in degrees Celcius) allowed when in light mode.  This value must be in the range [0..40], and it must
     // be less than lightHighTemp and greater than darkLowTemp.  Its default value is 25C.
     // config.heaterControl.lightLowTemp = 25;
-    config.heaterControl.lightLowTemp = 30;
+    config.heaterControl.lightLowTemp = 23;
 
     // The highest battery temperature (in degrees Celcius) allowed when in light mode.  This value must be in the range [0..40], and it must
     // be greater than lightLowTemp and greater than darkHighTemp.  It's default value is 30C.
 //    config.heaterControl.lightHighTemp = 30;
-    config.heaterControl.lightHighTemp = 35;
+    config.heaterControl.lightHighTemp = 26;
 
     /*--- normal heater controller configuration ---*/
 
@@ -226,7 +226,7 @@ function init( config ) {
 
     // The maximum time, in milliseconds, to wait for confirmation of the heater working (by sensing the temperature increase on the heater output
     // thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
-    config.heaterControl.normal.confirmOnTimeMS = 30000;
+    config.heaterControl.normal.confirmOnTimeMS = 60000;
 
     // The initial cooldown period (in milliseconds) to use after the heater fails to start.  If the heater doesnt's start, it may be that the
     // thermal "fuse" has tripped and the heater needs to cool down.  The first attempted cooldown period is the length specified here;
@@ -240,11 +240,11 @@ function init( config ) {
 
     // The maximum time, in milliseconds, to wait for confirmation of the heater turning off (by sensing the temperature decrease on the
     // heater output thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
-    config.heaterControl.normal.confirmOffTimeMS = 30000;
+    config.heaterControl.normal.confirmOffTimeMS = 60000;
 
     // The maximum temperature (in °C), sensed by the heater output thermocouple, to allow while the heater is on.  If the temperature rises
-    // above this level, the heater will be shut off.  The default temperature is 50°C; valid values are in the range [30..60].
-    config.heaterControl.normal.heaterTempLimit = 50;
+    // above this level, the heater will be shut off.  The default temperature is 80°C; valid values are in the range [30..100].
+    config.heaterControl.normal.heaterTempLimit = 100;
 
     // The time, in milliseconds, to cool down the heater after turning it off.  The default is 180000 (3 minutes); valid values are
     // in the range [60000..600000].
@@ -253,12 +253,12 @@ function init( config ) {
     /*--- battery-only heater controller configuration ---*/
 
     // The minimum temperature increase (in °C) from the battery thermocouple to verify that the heater is working.  The default is 5°C, valid
-    // values are in the range [5..30].
-    config.heaterControl.batteryOnly.confirmOnDelta = 10;
+    // values are in the range [.1..30].
+    config.heaterControl.batteryOnly.confirmOnDelta = 0.5;
 
     // The maximum time, in milliseconds, to wait for confirmation of the heater working (by sensing the temperature increase on the battery
     // thermocouple).  The default is 180,000 (3 minutes); valid values are in the range [10,000..600,000].
-    config.heaterControl.batteryOnly.confirmOnTimeMS = 180000;
+    config.heaterControl.batteryOnly.confirmOnTimeMS = 300000;
 
     // The initial cooldown period (in milliseconds) to use after the heater fails to start.  If the heater doesnt's start, it may be that the
     // thermal "fuse" has tripped and the heater needs to cool down.  The first attempted cooldown period is the length specified here;
@@ -267,12 +267,12 @@ function init( config ) {
     config.heaterControl.batteryOnly.initialCooldownPeriodMS = 60000;
 
     // The minimum temperature decrease (in °C) from the heater output thermocouple to verify that the heater is working.  The default is
-    //  -5°C, valid values are in the range [-30..-5].  Note that the value is negative (indicating a temperature drop).
-    config.heaterControl.batteryOnly.confirmOffDelta = -5;
+    //  -5°C, valid values are in the range [-30..-0.1].  Note that the value is negative (indicating a temperature drop).
+    config.heaterControl.batteryOnly.confirmOffDelta = -0.5;
 
     // The maximum time, in milliseconds, to wait for confirmation of the heater turning off (by sensing the temperature decrease on the
     // battery thermocouple).  The default is 180,000 (3 minutes); valid values are in the range [10,000..600,000].
-    config.heaterControl.batteryOnly.confirmOffTimeMS = 180000;
+    config.heaterControl.batteryOnly.confirmOffTimeMS = 300000;
 
     // The time, in milliseconds, to cool down the heater after turning it off.  The default is 180000 (3 minutes); valid values are
     // in the range [60000..600000].
@@ -286,7 +286,7 @@ function init( config ) {
 
     // The maximum time, in milliseconds, to wait for confirmation of the heater working (by sensing the temperature increase on the battery
     // thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
-    config.heaterControl.heaterOnly.confirmOnTimeMS = 30000;
+    config.heaterControl.heaterOnly.confirmOnTimeMS = 60000;
 
     // The initial cooldown period (in milliseconds) to use after the heater fails to start.  If the heater doesnt's start, it may be that the
     // thermal "fuse" has tripped and the heater needs to cool down.  The first attempted cooldown period is the length specified here;
@@ -332,7 +332,7 @@ function init( config ) {
      */
 
     // The maximum number of console clients that may connect simultaneously.  Defaults to 1.
-    config.consoleServer.maxClients = 1;
+    config.consoleServer.maxClients = 2;
 
     // The name of this console server.
     config.consoleServer.name = "shedsolar";
@@ -368,9 +368,17 @@ function init( config ) {
     // A map of test scenarios.  Each scenario is itself a map of test enabler names (which must match the names registered by test code) to test
     // enabler instances.
     config.testManager.scenarios = makeMap( {
-        simple: {
-            batteryRaw: makeEnabler( "Manual", { "enabled": false, "mask": 0x00000001 } ),
-            heaterRaw:  makeEnabler( "Manual", { "enabled": false, "mask": 0x00000004 } )
+        battery_only: {
+            heaterRaw:  makeEnabler( "Simple", { "mask": 0x00010001 } ),
+            loTemp: makeEnabler( "Simple", { "temp": 0.0 } ),
+            hiTemp: makeEnabler( "Simple", { "temp": 30.0 } )
+        },
+        heater_only: {
+            batteryRaw: makeEnabler( "Simple", { "mask": 0x00010001 } )
+        },
+        no_temps: {
+            heaterRaw:  makeEnabler( "Simple", { "mask": 0x00010001 } ),
+            batteryRaw: makeEnabler( "Simple", { "mask": 0x00010001 } )
         }
     } );
 }

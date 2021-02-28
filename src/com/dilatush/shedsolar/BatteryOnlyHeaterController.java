@@ -5,6 +5,7 @@ import com.dilatush.util.fsm.FSM;
 import com.dilatush.util.fsm.FSMSpec;
 import com.dilatush.util.fsm.FSMState;
 import com.dilatush.util.fsm.FSMTransition;
+import com.dilatush.util.fsm.events.FSMEvent;
 
 import java.time.Duration;
 import java.util.List;
@@ -67,20 +68,20 @@ public class BatteryOnlyHeaterController implements HeaterController {
         context = _context;
 
         // issue low and high battery temp events if warranted...
-        if( _context.batteryTemp < _context.loTemp )
+        if( _context.batteryTemp.getInfo() < _context.loTemp )
             fsm.onEvent( Event.LO_BATTERY_TEMP );
-        if( _context.batteryTemp > _context.hiTemp )
+        if( _context.batteryTemp.getInfo() > _context.hiTemp )
             fsm.onEvent( Event.HI_BATTERY_TEMP );
 
         // if we're in confirming heater on state, see if we've risen enough...
         if( fsm.getStateEnum() == State.CONFIRM_HEATER_ON ) {
-            if( _context.batteryTemp > (startingTemp + config.confirmOnDelta ) )
+            if( _context.batteryTemp.getInfo() > (startingTemp + config.confirmOnDelta ) )
                 fsm.onEvent( Event.BATTERY_TEMP_RISE );
         }
 
         // if we're in confirming heater off state, see if we've dropped enough...
         if( fsm.getStateEnum() == State.CONFIRM_HEATER_OFF ) {
-            if( _context.batteryTemp < (startingTemp + config.confirmOffDelta ) )
+            if( _context.batteryTemp.getInfo() < (startingTemp + config.confirmOffDelta ) )
                 fsm.onEvent( Event.BATTERY_TEMP_DROP );
         }
     }
@@ -200,7 +201,7 @@ public class BatteryOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Battery-only heater controller on entry to CONFIRM_SSR_ON" );
 
         // record our starting temperature (so we can sense the temperature rise)...
-        startingTemp = context.heaterTemp;
+        startingTemp = context.batteryTemp.getInfo();
 
         // turn on the heater and the heater LED...
         context.heaterOn.run();
@@ -246,7 +247,7 @@ public class BatteryOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Battery-only heater controller on exit from ON" );
 
         // record the starting temperature (so we can sense the temperature drop)...
-        startingTemp = context.heaterTemp;
+        startingTemp = context.batteryTemp.getInfo();
 
         // turn off the heater and LED...
         context.heaterOff.run();
@@ -259,6 +260,12 @@ public class BatteryOnlyHeaterController implements HeaterController {
     }
 
 
+    // on event...
+    private void event( final FSMEvent<Event> _event ) {
+        LOGGER.finest( () -> "Battery-only controller event: " + _event.toString() );
+    }
+
+
     /**
      * The configuration for this class, normally from JavaScript.
      */
@@ -266,7 +273,7 @@ public class BatteryOnlyHeaterController implements HeaterController {
 
         /**
          * The minimum temperature increase (in °C) from the battery output thermocouple to verify that the heater is working.  The default is 5°C,
-         * valid values are in the range [5..30].
+         * valid values are in the range [0.1..30].
          */
         public float confirmOnDelta = 5;
 
@@ -286,9 +293,9 @@ public class BatteryOnlyHeaterController implements HeaterController {
 
         /**
          * The minimum temperature decrease (in °C) from the heater output thermocouple to verify that the heater is working.  The default is
-         * -5°C, valid values are in the range [-30..-5].  Note that the value is negative (indicating a temperature drop).
+         * -5°C, valid values are in the range [-30..-0.1].  Note that the value is negative (indicating a temperature drop).
          */
-        public float confirmOffDelta = -10;
+        public float confirmOffDelta = -5;
 
         /**
          * The maximum time, in milliseconds, to wait for confirmation of the heater turning off (by sensing the temperature decrease on the
@@ -305,13 +312,13 @@ public class BatteryOnlyHeaterController implements HeaterController {
 
         @Override
         public void verify( final List<String> _messages ) {
-            validate( () -> (confirmOnDelta >= 5) && (confirmOnDelta <= 30), _messages,
+            validate( () -> (confirmOnDelta >= 0.1) && (confirmOnDelta <= 30), _messages,
                     "Battery-only heater controller confirm on delta temperature is out of range: " + confirmOnDelta );
             validate( () -> (confirmOnTimeMS >= 10000) && (confirmOnTimeMS <= 600000), _messages,
                     "Battery-only heater controller confirm on time is out of range: " + confirmOnTimeMS );
             validate( () -> (initialCooldownPeriodMS >= 10000) && (initialCooldownPeriodMS <= 600000), _messages,
                     "Battery-only heater controller initial cooldown period is out of range: " + initialCooldownPeriodMS );
-            validate( () -> (confirmOffDelta >= -30) && (confirmOffDelta <= -5), _messages,
+            validate( () -> (confirmOffDelta >= -30) && (confirmOffDelta <= -0.1), _messages,
                     "Battery-only heater controller confirm off delta temperature is out of range: " + confirmOffDelta );
             validate( () -> (confirmOffTimeMS >= 10000) && (confirmOffTimeMS <= 600000), _messages,
                     "Battery-only heater controller confirm off time is out of range: " + confirmOffTimeMS );
@@ -333,6 +340,7 @@ public class BatteryOnlyHeaterController implements HeaterController {
         spec.enableEventScheduling( ShedSolar.instance.scheduledExecutor );
 
         spec.setStateChangeListener( this::stateChange );
+        spec.setEventListener( this::event );
 
         spec.setStateOnEntryAction( State.CONFIRM_SSR_ON,  this::onEntry_ConfirmSSROn  );
         spec.setStateOnEntryAction( State.CONFIRM_SSR_OFF, this::onEntry_ConfirmSSROff );

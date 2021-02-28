@@ -5,6 +5,7 @@ import com.dilatush.util.fsm.FSM;
 import com.dilatush.util.fsm.FSMSpec;
 import com.dilatush.util.fsm.FSMState;
 import com.dilatush.util.fsm.FSMTransition;
+import com.dilatush.util.fsm.events.FSMEvent;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -72,22 +73,22 @@ public class HeaterOnlyHeaterController implements HeaterController {
         context = _context;
 
         // issue low battery temp events using the heater thermocouple to measure (will only be useful when heater is off, obviously)...
-        if( _context.heaterTemp < _context.loTemp )
+        if( _context.heaterTemp.getInfo() < _context.loTemp )
             fsm.onEvent( Event.LO_BATTERY_TEMP );
 
         // issue high heater temp, if warranted...
-        if( _context.heaterTemp > config.heaterTempLimit )
+        if( _context.heaterTemp.getInfo() > config.heaterTempLimit )
             fsm.onEvent( Event.HI_HEATER_TEMP );
 
         // if we're in confirming heater on state, see if we've risen enough...
         if( fsm.getStateEnum() == State.CONFIRM_HEATER_ON ) {
-            if( _context.heaterTemp > (startingTemp + config.confirmOnDelta ) )
+            if( _context.heaterTemp.getInfo() > (startingTemp + config.confirmOnDelta ) )
                 fsm.onEvent( Event.HEATER_TEMP_RISE );
         }
 
         // if we're in confirming heater off state, see if we've dropped enough...
         if( fsm.getStateEnum() == State.CONFIRM_HEATER_OFF ) {
-            if( _context.heaterTemp < (startingTemp + config.confirmOffDelta ) )
+            if( _context.heaterTemp.getInfo() < (startingTemp + config.confirmOffDelta ) )
                 fsm.onEvent( Event.HEATER_TEMP_DROP );
         }
     }
@@ -209,7 +210,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Heater-only heater controller on entry to CONFIRM_SSR_ON" );
 
         // record our starting temperature (so we can sense the temperature rise)...
-        startingTemp = context.heaterTemp;
+        startingTemp = context.heaterTemp.getInfo();
 
         // turn on the heater and the heater LED...
         context.heaterOn.run();
@@ -290,7 +291,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Heater-only heater controller on exit from ON" );
 
         // record the starting temperature (so we can sense the temperature drop)...
-        startingTemp = context.heaterTemp;
+        startingTemp = context.heaterTemp.getInfo();
 
         // turn off the heater and LED...
         context.heaterOff.run();
@@ -300,6 +301,12 @@ public class HeaterOnlyHeaterController implements HeaterController {
     // on state change...
     private void stateChange( final State _state ) {
         LOGGER.finest( "Heater-only heater controller changed state to: " + _state );
+    }
+
+
+    // on event...
+    private void event( final FSMEvent<Event> _event ) {
+        LOGGER.finest( () -> "Heater-only controller event: " + _event.toString() );
     }
 
 
@@ -393,6 +400,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
         spec.enableEventScheduling( ShedSolar.instance.scheduledExecutor );
 
         spec.setStateChangeListener( this::stateChange );
+        spec.setEventListener( this::event );
 
         spec.setStateOnEntryAction( State.CONFIRM_SSR_ON,  this::onEntry_ConfirmSSROn  );
         spec.setStateOnEntryAction( State.CONFIRM_SSR_OFF, this::onEntry_ConfirmSSROff );

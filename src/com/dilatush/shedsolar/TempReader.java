@@ -126,9 +126,8 @@ public class TempReader {
         heaterRawTE  = TestManager.getInstance().register( "heaterRaw"  );
 
         // schedule our temperature reader to run under the executor, so we don't bog down the scheduler...
-        canceller = ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate( () -> {
-            ShedSolar.instance.executor.submit( this::tempTask );
-        }, Duration.ZERO, config.startupInterval );
+        canceller = ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate(
+                () -> ShedSolar.instance.executor.submit( this::tempTask ), Duration.ZERO, config.startupInterval );
     }
 
 
@@ -205,7 +204,7 @@ public class TempReader {
 
         // get the current status...
         TempSensorStatus newStatus = new TempSensorStatus(
-                (rawTemp & FAULT_MASK) != 0,
+                (rawTemp & FAULT_MASK       ) != 0,
                 (rawTemp & IO_ERROR_MASK    ) != 0,
                 (rawTemp & OPEN_MASK        ) != 0,
                 (rawTemp & SHORT_TO_VCC_MASK) != 0,
