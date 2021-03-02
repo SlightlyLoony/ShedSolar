@@ -187,7 +187,7 @@ public class BatteryOnlyHeaterController implements HeaterController {
     // on CONFIRM_HEATER_OFF:BATTERY_TEMP_DROP -> COOLING...
     private void on_ConfirmHeaterOff_BatteryTempDrop( final FSMTransition<State, Event> _transition ) {
 
-        LOGGER.finest( () -> "Battery-only heater controller CONFIRM_HEATER_OFF:HEATER_TEMP_DROP" );
+        LOGGER.finest( () -> "Battery-only heater controller CONFIRM_HEATER_OFF:BATTERY_TEMP_DROP" );
 
         // if we are still sensing power, we may have a bad sense relay - send a Hap to that effect...
         if( senseRelay )

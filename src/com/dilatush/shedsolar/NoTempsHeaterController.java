@@ -154,13 +154,15 @@ public class NoTempsHeaterController implements HeaterController {
 
         // estimate the time we need to keep the heater on, and schedule an event for it...
         // note the "safety tweak", because we're taking the position that it's better for the batteries to be a bit warm than a bit cold...
-        double onTimeSeconds = config.degreesPerSecond * (context.hiTemp - context.loTemp) * config.safetyTweak;
+        double onTimeSeconds =  ((context.hiTemp - context.loTemp) / config.degreesPerSecond) * config.safetyTweak;
         _state.fsm.scheduleEvent( Event.TURN_OFF, Duration.ofMillis( Math.round( 1000 * onTimeSeconds ) ) );
 
         // estimate how long we should wait (heater off) for the battery temperature to drop back to the low threshold,
         // and schedule an event for that...
         double offTimeSeconds = ThermalCalcs.t( context.loTemp, context.hiTemp, outsideTemp - context.hiTemp, config.k );
         _state.fsm.scheduleEvent( Event.TRIGGER, Duration.ofMillis( Math.round( (onTimeSeconds + offTimeSeconds) * 1000 ) ) );
+
+        LOGGER.log( Level.FINEST, () -> "On time: " + onTimeSeconds + ", off time: " + offTimeSeconds );
     }
 
 

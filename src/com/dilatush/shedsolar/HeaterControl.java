@@ -34,6 +34,7 @@ import static com.dilatush.shedsolar.LightDetector.Mode.LIGHT;
 public class HeaterControl {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
+    private static final long STARTUP_DELAY_MS = 30000;
 
     private final Config       config;      // our configuration...
     private final ShedSolar    shedSolar;   // our lord and master...
@@ -44,9 +45,6 @@ public class HeaterControl {
     private final GpioPinDigitalInput  ssrSense;
     private final GpioPinDigitalOutput heaterPowerLED;
     private final GpioPinDigitalOutput heaterSSR;
-
-    // startup flag...
-    private boolean startedUp;
 
     // the heater controller we're currently using...
     private HeaterController heaterController;
@@ -88,9 +86,6 @@ public class HeaterControl {
         heaterPowerLED.setShutdownOptions( true, PinState.HIGH );
         heaterSSR.setShutdownOptions(      true, PinState.HIGH );
 
-        // this flag is false until we have valid temperature for heater or battery...
-        startedUp = false;
-
         // instantiate our controllers...
         normalHeaterController      = new NormalHeaterController(      config.normal      );
         batteryOnlyHeaterController = new BatteryOnlyHeaterController( config.batteryOnly );
@@ -101,8 +96,11 @@ public class HeaterControl {
         loTempTE = TestManager.getInstance().register( "loTemp" );
         hiTempTE = TestManager.getInstance().register( "hiTemp" );
 
-        // start up our period tick...
-        ShedSolar.instance.scheduledExecutor.scheduleWithFixedDelay( this::tick, Duration.ZERO, Duration.ofMillis( config.tickTime ) );
+        // start up our period tick 30 seconds after startup...
+        ShedSolar.instance.scheduledExecutor.scheduleWithFixedDelay(
+                this::tick,
+                Duration.ofMillis( STARTUP_DELAY_MS ),
+                Duration.ofMillis( config.tickTime ) );
     }
 
 
@@ -116,13 +114,6 @@ public class HeaterControl {
             Info<Float> batteryTemp = shedSolar.batteryTemperature.getInfoSource();
             Info<Float> heaterTemp  = shedSolar.heaterTemperature.getInfoSource();
             Info<Float> ambientTemp = shedSolar.ambientTemperature.getInfoSource();
-
-            // if we haven't started up yet, see if we got battery or heater temperatures; just leave if not...
-            if( !startedUp ) {
-                startedUp = batteryTemp.isInfoAvailable() || heaterTemp.isInfoAvailable();
-                if( !startedUp )
-                    return;
-            }
 
             // figure out which heater controller we should be using, and switch if necessary...
             if( batteryTemp.isInfoAvailable() && heaterTemp.isInfoAvailable() ) { // the normal case...

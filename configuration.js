@@ -374,7 +374,9 @@ function init( config ) {
             hiTemp: makeEnabler( "Simple", { "temp": 30.0 } )
         },
         heater_only: {
-            batteryRaw: makeEnabler( "Simple", { "mask": 0x00010001 } )
+            batteryRaw: makeEnabler( "Simple", { "mask": 0x00010001 } ),
+            loTemp: makeEnabler( "Simple", { "temp": 0.0 } ),
+            hiTemp: makeEnabler( "Simple", { "temp": 30.0 } )
         },
         no_temps: {
             heaterRaw:  makeEnabler( "Simple", { "mask": 0x00010001 } ),

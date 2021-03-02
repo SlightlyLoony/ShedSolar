@@ -150,12 +150,25 @@ public class TempReader {
 
             /*
              * Now handle the ambient temperature.  Both chips supply it; we use the battery temperature chip if it's got a good reading,
-             * the heater temperature chip otherwise.  If neither is available, we simply don't report ambient temperature.
+             * the heater temperature chip otherwise.  If neither is available, we see if the two values agree reasonably closely; if so, we
+             * supply their average (this could happen if both thermocouples are bad, but the chips are working fine).  If none of these work,
+             * we simply don't report ambient temperature.
              */
+
+            // first we get the ambient temperature from each chip, and their average...
+            float ambientHeater =  ((rawHeater  & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f;
+            float ambientBattery = ((rawBattery & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f;
+            float ambientAverage = (ambientHeater + ambientBattery) / 2.0f;
+
+            // now we see if they're reasonably close...
+            boolean closeAmbients = Math.abs( ambientHeater - ambientBattery ) < 2.0f;
+
             if( batteryTemperature.isInfoAvailable() )
-                ambientTemperatureSetter.accept( ((rawBattery & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f );
+                ambientTemperatureSetter.accept( ambientBattery );
             else if( heaterTemperature.isInfoAvailable() )
-                ambientTemperatureSetter.accept( ((rawHeater  & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f );
+                ambientTemperatureSetter.accept( ambientHeater );
+            else if( closeAmbients )
+                ambientTemperatureSetter.accept( ambientAverage );
             else
                 ambientTemperatureSetter.accept( null );
 
