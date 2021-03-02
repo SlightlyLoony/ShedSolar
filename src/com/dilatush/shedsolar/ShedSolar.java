@@ -72,6 +72,7 @@ public class ShedSolar {
     private HeaterControl            heaterControl;
     private TempReader               tempReader;
     private ConsoleServer            consoleServer;
+    private ThermalTracker           thermalTracker;
     private GpioController           gpio;
 
 
@@ -218,6 +219,8 @@ public class ShedSolar {
             heaterTemperatureSetter.accept( tempReader.heaterTemperature );
             ambientTemperatureSetter.accept( tempReader.ambientTemperature );
 
+            // set up our thermal tracker...
+            thermalTracker = new ThermalTracker();
         }
 
         // if we get ANY exception during the app startup, we consider it to be fatal...

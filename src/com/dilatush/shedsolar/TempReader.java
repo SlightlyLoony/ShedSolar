@@ -127,7 +127,9 @@ public class TempReader {
 
         // schedule our temperature reader to run under the executor, so we don't bog down the scheduler...
         canceller = ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate(
-                () -> ShedSolar.instance.executor.submit( this::tempTask ), Duration.ZERO, config.startupInterval );
+                () -> ShedSolar.instance.executor.submit( this::tempTask ),
+                Duration.ZERO,
+                config.startupInterval );
     }
 
 
@@ -176,8 +178,14 @@ public class TempReader {
             if( batteryTemperature.isInfoAvailable() && heaterTemperature.isInfoAvailable() && (canceller != null) ) {
                 canceller.cancel( false );
                 canceller = null;
-                ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate( this::tempTask, Duration.ZERO, config.normalInterval );
+                ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate(
+                        () -> ShedSolar.instance.executor.submit( this::tempTask ),
+                        Duration.ZERO,
+                        config.normalInterval );
             }
+
+            // tell the world we've published...
+            shedSolar.haps.post( TEMPERATURES_READ );
         }
 
         // by definition, any exception caught here is, well, exceptional!

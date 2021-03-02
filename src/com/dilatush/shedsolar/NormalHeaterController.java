@@ -156,6 +156,9 @@ public class NormalHeaterController implements HeaterController {
 
         // if we've tried more than 5 times, we may have a dead SSR or a dead heater - send a Hap to that effect...
         ShedSolar.instance.haps.post( senseRelay ? Events.POSSIBLE_HEATER_FAILURE : Events.POSSIBLE_SSR_FAILURE );
+
+        // tell the thermal tracker that we failed to start the heater up...
+        ShedSolar.instance.haps.post( Events.NORMAL_HEATER_NO_START );
     }
 
 
@@ -218,6 +221,9 @@ public class NormalHeaterController implements HeaterController {
 
         // set a timeout for 100 ms to check sense relay...
         _state.fsm.scheduleEvent( Event.ON_SENSED, Duration.ofMillis( 100 ) );
+
+        // tell the thermal tracker that we're starting the heater up...
+        ShedSolar.instance.haps.post( Events.NORMAL_HEATER_ON );
     }
 
 
@@ -261,6 +267,9 @@ public class NormalHeaterController implements HeaterController {
 
         // turn off the heater and LED...
         context.heaterOff.run();
+
+        // tell the thermal tracker that we're turning the heater off...
+        ShedSolar.instance.haps.post( Events.NORMAL_HEATER_OFF );
     }
 
 
