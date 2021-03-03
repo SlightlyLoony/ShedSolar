@@ -17,7 +17,6 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.concurrent.ScheduledFuture;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -88,12 +87,6 @@ public class TempReader {
     private final TestEnabler batteryRawTE;
     private final TestEnabler heaterRawTE;
 
-    // schedule canceller...
-    private ScheduledFuture<?> canceller;
-
-    // our configuration...
-    private final Config config;
-
 
     /**
      * Creates a new instance of this class, configured according to the given configuration file.
@@ -101,8 +94,6 @@ public class TempReader {
      * @param _config the configuration file
      */
     public TempReader( final Config _config ) throws IOException {
-
-        config = _config;
 
         // set up our information publishing...
         batteryTemperature             = new InfoView<>( (setter) -> batteryTemperatureSetter             = setter, false );
@@ -118,18 +109,18 @@ public class TempReader {
         heaterTempSPI  = SpiFactory.getInstance( SpiChannel.CS1, SpiDevice.DEFAULT_SPI_SPEED, SpiMode.MODE_1 );
 
         // create our noise filters...
-        batteryFilter = new NoiseFilter( config.noiseFilter );
-        heaterFilter  = new NoiseFilter( config.noiseFilter );
+        batteryFilter = new NoiseFilter( _config.noiseFilter );
+        heaterFilter  = new NoiseFilter( _config.noiseFilter );
 
         // create our test enablers...
         batteryRawTE = TestManager.getInstance().register( "batteryRaw" );
         heaterRawTE  = TestManager.getInstance().register( "heaterRaw"  );
 
         // schedule our temperature reader to run under the executor, so we don't bog down the scheduler...
-        canceller = ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate(
+        ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate(
                 () -> ShedSolar.instance.executor.submit( this::tempTask ),
                 Duration.ZERO,
-                config.startupInterval );
+                _config.interval );
     }
 
 
@@ -173,16 +164,6 @@ public class TempReader {
                 ambientTemperatureSetter.accept( ambientAverage );
             else
                 ambientTemperatureSetter.accept( null );
-
-            // switch the interval to the normal interval if we've started to get data...
-            if( batteryTemperature.isInfoAvailable() && heaterTemperature.isInfoAvailable() && (canceller != null) ) {
-                canceller.cancel( false );
-                canceller = null;
-                ShedSolar.instance.scheduledExecutor.scheduleAtFixedRate(
-                        () -> ShedSolar.instance.executor.submit( this::tempTask ),
-                        Duration.ZERO,
-                        config.normalInterval );
-            }
 
             // tell the world we've published...
             shedSolar.haps.post( TEMPERATURES_READ );
@@ -305,15 +286,9 @@ public class TempReader {
     public static class Config extends AConfig {
 
         /**
-         * The startup interval between temperature readings as a Duration.  Valid values are in the range [0.1 second .. 10 minutes].
+         * The interval between temperature readings as a Duration.  Valid values are in the range [0.1 second .. 10 minutes].
          */
-        public Duration startupInterval = Duration.ofMillis( 250 );
-
-        /**
-         * The normal interval between temperature readings as a duration.  Valid values are in the range of [3 seconds .. 60 seconds].  Because the
-         * sensor noise has an observed periodicity of about 10 seconds, this value <i>should</i> be relatively prime to 10 seconds.
-         */
-        public Duration normalInterval = Duration.ofSeconds( 7 );
+        public Duration interval = Duration.ofMillis( 250 );
 
         /**
          * An instance of the class that implements {@link ErrorCalc}, for the noise filter.
@@ -326,14 +301,10 @@ public class TempReader {
          */
         @Override
         public void verify( final List<String> _messages ) {
-            validate( () -> ((startupInterval != null)
-                            && (Duration.ofMillis( 100 ).compareTo( startupInterval ) <= 0)
-                            && (Duration.ofMinutes( 10 ).compareTo( startupInterval ) >= 0) ), _messages,
-                    "Temperature Reader startup interval out of range: " + startupInterval.toMillis() + "ms" );
-            validate( () -> ((normalInterval != null)
-                            && (Duration.ofSeconds( 3  ).compareTo( normalInterval ) <= 0)
-                            && (Duration.ofMinutes( 60 ).compareTo( normalInterval ) >= 0) ), _messages,
-                    "Temperature Reader normal interval out of range: " + normalInterval.toMillis() + "ms" );
+            validate( () -> ((interval != null)
+                            && (Duration.ofMillis( 100 ).compareTo( interval ) <= 0)
+                            && (Duration.ofMinutes( 10 ).compareTo( interval ) >= 0) ), _messages,
+                    "Temperature Reader startup interval out of range: " + interval.toMillis() + "ms" );
             noiseFilter.verify( _messages );
         }
     }

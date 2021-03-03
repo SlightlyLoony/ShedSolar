@@ -95,14 +95,9 @@ function init( config ) {
      * Temperature Reader configuration.
      */
 
-    // The startup interval between temperature readings as a Duration.  Valid values are in the range [0.1 second .. 10 minutes].  The default
+    // The interval between temperature readings as a Duration.  Valid values are in the range [0.1 second .. 10 minutes].  The default
     // value is 250 ms.
-    config.tempReader.startupInterval = Duration.ofMillis( 250 );
-
-    // The normal interval between temperature readings as a duration.  Valid values are in the range of [5 seconds .. 60 seconds].  Because the
-    // sensor noise has an observed periodicity of about 10 seconds, this value SHOULD be relatively prime to 10 seconds.  The default value is
-    // 7 seconds.
-    config.tempReader.normalInterval = Duration.ofSeconds( 3 );
+    config.tempReader.interval = Duration.ofMillis( 250 );
 
     // The number of samples (history) to keep in the filter.  Valid values are 2 or greater.
     config.tempReader.noiseFilter.numSamples = 41;
