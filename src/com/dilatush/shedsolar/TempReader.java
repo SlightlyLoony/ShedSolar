@@ -234,7 +234,13 @@ public class TempReader {
             _tempSetter.accept( (sample == null) ? null : sample.value );
         }
 
-        // otherwise, store invalid data...
+        // otherwise, if we have recent (< 5 seconds) data in the filter, we interpolate...
+        else if( _filter.getAge().compareTo( Duration.ofSeconds( 5 ) ) <= 0 ) {
+            Sample sample = _filter.getFilteredAt( Instant.now() );
+            _tempSetter.accept( (sample == null) ? null : sample.value );
+        }
+
+        // otherwise we have to start reporting that we can't read our temperature...
         else {
             _tempSetter.accept( null );
         }
@@ -244,7 +250,8 @@ public class TempReader {
 
 
     /**
-     * <p>Reads temperature from the given SPI device, assuming a MAX31855 chip, returning the result from the chip.</p>
+     * <p>Reads temperature from the given SPI device, assuming a MAX31855 chip, returning the result from the chip.  If we read with any indication
+     * of a fault, we'll try up to three times to get a faultless reading.</p>
      *
      * @param _device the SPI device to read temperature from
      * @param _name the name of the temperature being read
@@ -254,20 +261,32 @@ public class TempReader {
 
         try {
 
-            // get a raw reading...
-            // we write four bytes (which are ignored by the device), to read four...
-            byte[] readData = _device.write( writeData );
+            int rawReading = 0;
+            int attempts = 0;
+            while( attempts < 3 ) {
 
-            // if we didn't get at least four bytes, there's a problem...
-            if( readData.length < 4 ) {
-                LOGGER.log( Level.SEVERE, "Read temperature from " + _name + " got " + readData.length + " bytes, instead of 4" );
-                return IO_ERROR_MASK;
+                // get a raw reading...
+                // we write four bytes (which are ignored by the device), to read four...
+                byte[] readData = _device.write( writeData );
+
+                // if we didn't get at least four bytes, there's a bad problem...
+                if( readData.length < 4 ) {
+                    LOGGER.log( Level.SEVERE, "Read temperature from " + _name + " got " + readData.length + " bytes, instead of 4" );
+                    return IO_ERROR_MASK;
+                }
+
+                // turn it into an integer...
+                rawReading = ((readData[0] & 0xff) << 24) | ((readData[1] & 0xff) << 16) | ((readData[2] & 0xff) << 8) | (readData[3] & 0xff);
+
+                // if we have a good reading, we're done...
+                if( (rawReading & FAULT_MASK) == 0 )
+                    break;
+
+                // well, we made another attempt...
+                attempts++;
+
+                LOGGER.finest( String.format( "Raw temperature read: %1$08x", rawReading ) );
             }
-
-            // turn it into an integer...
-            int rawReading = ((readData[0] & 0xff) << 24) | ((readData[1] & 0xff) << 16) |((readData[2] & 0xff) << 8) |(readData[3] & 0xff);
-
-            LOGGER.finest( String.format( "Raw temperature read: %1$08x", rawReading ) );
 
             return rawReading;
         }
@@ -350,8 +369,8 @@ public class TempReader {
          * @param _shortToVCC {@code True} if the connection to the thermocouple is shorted to Vcc.
          * @param _shortToGnd {@code True} if the connection to the thermocouple is shorted to ground.
          */
-        public TempSensorStatus( final boolean _sensorProblem, final boolean _ioError, final boolean _open,
-                                 final boolean _shortToVCC, final boolean _shortToGnd ) {
+        private TempSensorStatus( final boolean _sensorProblem, final boolean _ioError, final boolean _open,
+                                  final boolean _shortToVCC, final boolean _shortToGnd ) {
 
             sensorProblem = _sensorProblem;
             ioError = _ioError;
@@ -364,7 +383,7 @@ public class TempReader {
         /**
          * Create a new instance of this class with all fields set to {@code false}.
          */
-        public TempSensorStatus() {
+        private TempSensorStatus() {
             sensorProblem = false;
             ioError = false;
             open = false;

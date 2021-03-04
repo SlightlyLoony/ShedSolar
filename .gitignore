@@ -1,2 +1,5 @@
 /logs/
 /secret.js
+/dbpassword.js
+/key.js
+/recordings/

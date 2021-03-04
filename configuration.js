@@ -3,8 +3,9 @@
  */
 
 // load our secret keys from a secure location...
-load( "/apps/shedsolar/key.js" );     // the console server shared secret...
-load( "/apps/shedsolar/secret.js" );  // the CPO shared secret...
+load( "/apps/shedsolar/key.js" );         // the console server shared secret...
+load( "/apps/shedsolar/secret.js" );      // the CPO shared secret...
+load( "/apps/shedsolar/dbpassword.js" );  // the database password...
 
 
 /*
@@ -139,6 +140,17 @@ function init( config ) {
 
 
     /*
+     * Database logger configuration.
+     */
+
+    config.databaseLogger.host = "beast.dilatush.com";
+
+    config.databaseLogger.user = "shedsolar";
+
+    config.databaseLogger.password = dbpassword;
+
+
+    /*
      * Outback interrogator configuration.
      */
 
@@ -206,12 +218,12 @@ function init( config ) {
     // The lowest battery temperature (in degrees Celcius) allowed when in light mode.  This value must be in the range [0..40], and it must
     // be less than lightHighTemp and greater than darkLowTemp.  Its default value is 25C.
     // config.heaterControl.lightLowTemp = 25;
-    config.heaterControl.lightLowTemp = 23;
+    config.heaterControl.lightLowTemp = 28;
 
     // The highest battery temperature (in degrees Celcius) allowed when in light mode.  This value must be in the range [0..40], and it must
     // be greater than lightLowTemp and greater than darkHighTemp.  It's default value is 30C.
 //    config.heaterControl.lightHighTemp = 30;
-    config.heaterControl.lightHighTemp = 26;
+    config.heaterControl.lightHighTemp = 30;
 
     /*--- normal heater controller configuration ---*/
 
@@ -243,7 +255,7 @@ function init( config ) {
 
     // The time, in milliseconds, to cool down the heater after turning it off.  The default is 180000 (3 minutes); valid values are
     // in the range [60000..600000].
-    config.heaterControl.normal.coolingTimeMS = 180000;
+    config.heaterControl.normal.coolingTimeMS = 240000;
 
     /*--- battery-only heater controller configuration ---*/
 

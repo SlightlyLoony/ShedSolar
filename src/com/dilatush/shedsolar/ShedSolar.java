@@ -73,6 +73,7 @@ public class ShedSolar {
     private TempReader               tempReader;
     private ConsoleServer            consoleServer;
     private ThermalTracker           thermalTracker;
+    private DatabaseLogger           databaseLogger;
     private GpioController           gpio;
 
 
@@ -221,6 +222,9 @@ public class ShedSolar {
 
             // set up our thermal tracker...
             thermalTracker = new ThermalTracker();
+
+            // set up our database logger...
+            databaseLogger = new DatabaseLogger( config.databaseLogger );
         }
 
         // if we get ANY exception during the app startup, we consider it to be fatal...

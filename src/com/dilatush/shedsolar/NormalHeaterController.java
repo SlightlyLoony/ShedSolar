@@ -69,6 +69,8 @@ public class NormalHeaterController implements HeaterController {
             // save the context...
             context = _context;
 
+            LOGGER.log( Level.FINEST, () -> "Battery: " + context.batteryTemp.getInfo() + ", Heater: " + context.heaterTemp.getInfo() );
+
             // issue low and high battery temp events if warranted...
             if( _context.batteryTemp.getInfo() < _context.loTemp )
                 fsm.onEvent( Event.LO_BATTERY_TEMP );
@@ -159,6 +161,7 @@ public class NormalHeaterController implements HeaterController {
 
         // tell the thermal tracker that we failed to start the heater up...
         ShedSolar.instance.haps.post( Events.NORMAL_HEATER_NO_START );
+        ShedSolar.instance.haps.post( Events.HEATER_NO_START );
     }
 
 

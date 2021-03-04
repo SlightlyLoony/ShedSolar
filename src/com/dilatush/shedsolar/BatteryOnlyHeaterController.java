@@ -139,6 +139,7 @@ public class BatteryOnlyHeaterController implements HeaterController {
 
         // turn off the heater, as we're gonna cool down for a while...
         context.heaterOff.run();
+        ShedSolar.instance.haps.post( Events.HEATER_NO_START );
 
         // set a timeout for a cooldown period, more time for more tries...
         turnOnTries = Math.max( 5, turnOnTries + 1 );

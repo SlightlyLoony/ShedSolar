@@ -36,6 +36,7 @@ public class Config extends AConfig {
     public HeaterControl.Config        heaterControl      = new HeaterControl.Config();
     public TestManager.Config          testManager        = new TestManager.Config();
     public ConsoleServer.Config        consoleServer      = new ConsoleServer.Config();
+    public DatabaseLogger.Config       databaseLogger     = new DatabaseLogger.Config();
 
 
     /**
@@ -55,5 +56,6 @@ public class Config extends AConfig {
         heaterControl      .verify( _messages );
         testManager        .verify( _messages );
         consoleServer      .verify( _messages );
+        databaseLogger     .verify( _messages );
     }
 }
