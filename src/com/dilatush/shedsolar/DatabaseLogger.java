@@ -97,15 +97,15 @@ public class DatabaseLogger {
                 double hot = 0;
                 if( heaterOn == null ) {
                     if( heaterOnTime != null ) {
-                        hot = 1000.0 * heaterOnTime.toMillis();
+                        hot = 0.001 * heaterOnTime.toMillis();
                         heaterOnTime = null;
                     }
                 }
                 else {
-                    hot = Duration.between( heaterOn, Instant.now( Clock.systemUTC() ) ).toMillis() * 1000.0;
+                    hot = Duration.between( heaterOn, Instant.now( Clock.systemUTC() ) ).toMillis() * 0.001;
                     heaterOn = Instant.now( Clock.systemUTC() );
                     if( heaterOnTime != null ) {
-                        hot += 1000.0 * heaterOnTime.toMillis();
+                        hot += 0.001 * heaterOnTime.toMillis();
                         heaterOnTime = null;
                     }
                 }
