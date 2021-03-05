@@ -138,8 +138,8 @@ public class BatteryOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Battery-only heater controller CONFIRM_HEATER_ON:NO_TEMP_RISE" );
 
         // turn off the heater, as we're gonna cool down for a while...
-        context.heaterOff.run();
         ShedSolar.instance.haps.post( Events.HEATER_NO_START );
+        context.heaterOff.run();
 
         // set a timeout for a cooldown period, more time for more tries...
         turnOnTries = Math.max( 5, turnOnTries + 1 );

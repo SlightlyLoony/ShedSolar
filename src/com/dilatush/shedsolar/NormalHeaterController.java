@@ -149,6 +149,10 @@ public class NormalHeaterController implements HeaterController {
 
         LOGGER.finest( () -> "Normal heater controller CONFIRM_HEATER_ON:NO_TEMP_RISE" );
 
+        // tell the thermal tracker that we failed to start the heater up...
+        ShedSolar.instance.haps.post( Events.NORMAL_HEATER_NO_START );
+        ShedSolar.instance.haps.post( Events.HEATER_NO_START );
+
         // turn off the heater, as we're gonna cool down for a while...
         context.heaterOff.run();
 
@@ -158,10 +162,6 @@ public class NormalHeaterController implements HeaterController {
 
         // if we've tried more than 5 times, we may have a dead SSR or a dead heater - send a Hap to that effect...
         ShedSolar.instance.haps.post( senseRelay ? Events.POSSIBLE_HEATER_FAILURE : Events.POSSIBLE_SSR_FAILURE );
-
-        // tell the thermal tracker that we failed to start the heater up...
-        ShedSolar.instance.haps.post( Events.NORMAL_HEATER_NO_START );
-        ShedSolar.instance.haps.post( Events.HEATER_NO_START );
     }
 
 
