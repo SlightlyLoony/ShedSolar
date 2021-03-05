@@ -74,6 +74,7 @@ public class ShedSolar {
     private ConsoleServer            consoleServer;
     private ThermalTracker           thermalTracker;
     private DatabaseLogger           databaseLogger;
+    private StatusLED                statusLED;
     private GpioController           gpio;
 
 
@@ -225,6 +226,9 @@ public class ShedSolar {
 
             // set up our database logger...
             databaseLogger = new DatabaseLogger( config.databaseLogger );
+
+            // set up our status LED...
+            statusLED = new StatusLED( config.statusLED );
         }
 
         // if we get ANY exception during the app startup, we consider it to be fatal...

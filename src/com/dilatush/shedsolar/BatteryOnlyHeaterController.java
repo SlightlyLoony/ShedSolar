@@ -1,6 +1,7 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.util.AConfig;
+import com.dilatush.util.Haps;
 import com.dilatush.util.fsm.FSM;
 import com.dilatush.util.fsm.FSMSpec;
 import com.dilatush.util.fsm.FSMState;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static com.dilatush.shedsolar.Events.*;
 import static com.dilatush.shedsolar.HeaterControl.HeaterControllerContext;
 
 /**
@@ -32,6 +34,10 @@ public class BatteryOnlyHeaterController implements HeaterController {
     private boolean                 senseRelay;    // true if the relay sensed that the heater power is on...
     private int                     turnOnTries;   // number of times we've tried to turn the heater on...
 
+    // some short aliases...
+    private final ShedSolar ss;
+    private final Haps<Events> haps;
+
 
     // the states of our FSM...
     private enum State {
@@ -50,6 +56,9 @@ public class BatteryOnlyHeaterController implements HeaterController {
      * @param _config The {@link Config} configuration.
      */
     public BatteryOnlyHeaterController( final Config _config ) {
+
+        ss = ShedSolar.instance;
+        haps = ss.haps;
 
         config = _config;
         fsm = createFSM();
@@ -138,7 +147,7 @@ public class BatteryOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Battery-only heater controller CONFIRM_HEATER_ON:NO_TEMP_RISE" );
 
         // turn off the heater, as we're gonna cool down for a while...
-        ShedSolar.instance.haps.post( Events.HEATER_NO_START );
+        haps.post( Events.HEATER_NO_START );
         context.heaterOff.run();
 
         // set a timeout for a cooldown period, more time for more tries...
@@ -146,7 +155,8 @@ public class BatteryOnlyHeaterController implements HeaterController {
         _transition.setTimeout( Event.COOLED, Duration.ofMillis( config.initialCooldownPeriodMS * turnOnTries ) );
 
         // if we've tried more than 5 times, we may have a dead SSR or a dead heater - send a Hap to that effect...
-        ShedSolar.instance.haps.post( senseRelay ? Events.POSSIBLE_HEATER_FAILURE : Events.POSSIBLE_SSR_FAILURE );
+        if( turnOnTries >= 5 )
+            haps.post( senseRelay ? Events.POSSIBLE_HEATER_FAILURE : Events.POSSIBLE_SSR_FAILURE );
     }
 
 
@@ -156,8 +166,11 @@ public class BatteryOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Battery-only heater controller CONFIRM_HEATER_ON:HEATER_TEMP_RISE" );
 
         // if sense relay is false, then we probably have a bad sense relay - send a Hap to that effect...
-        if( !senseRelay )
-            ShedSolar.instance.haps.post( Events.POSSIBLE_SENSE_RELAY_FAILURE );
+        haps.post( senseRelay ? SENSE_RELAY_WORKING : POSSIBLE_SENSE_RELAY_FAILURE );
+
+        // we got a temperature rise, so the SSR and the heater must be working...
+        haps.post( HEATER_WORKING );
+        haps.post( SSR_WORKING );
     }
 
 
@@ -180,8 +193,7 @@ public class BatteryOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Battery-only heater controller CONFIRM_HEATER_OFF:NO_TEMP_DROP" );
 
         // if we are still sensing power, we may have a stuck SSR - send a Hap to that effect...
-        if( senseRelay )
-            ShedSolar.instance.haps.post( Events.POSSIBLE_SSR_FAILURE );
+        haps.post( senseRelay ? POSSIBLE_SSR_FAILURE : SSR_WORKING );
     }
 
 
@@ -191,8 +203,7 @@ public class BatteryOnlyHeaterController implements HeaterController {
         LOGGER.finest( () -> "Battery-only heater controller CONFIRM_HEATER_OFF:BATTERY_TEMP_DROP" );
 
         // if we are still sensing power, we may have a bad sense relay - send a Hap to that effect...
-        if( senseRelay )
-            ShedSolar.instance.haps.post( Events.POSSIBLE_SENSE_RELAY_FAILURE );
+        haps.post( senseRelay ? POSSIBLE_SENSE_RELAY_FAILURE : SENSE_RELAY_WORKING );
     }
 
 
@@ -338,7 +349,7 @@ public class BatteryOnlyHeaterController implements HeaterController {
 
         FSMSpec<State, Event> spec = new FSMSpec<>( State.OFF, Event.COOLED );
 
-        spec.enableEventScheduling( ShedSolar.instance.scheduledExecutor );
+        spec.enableEventScheduling( ss.scheduledExecutor );
 
         spec.setStateChangeListener( this::stateChange );
         spec.setEventListener( this::event );

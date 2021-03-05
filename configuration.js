@@ -154,6 +154,26 @@ function init( config ) {
 
 
     /*
+     * Status LED configuration.
+     */
+
+    // The duration of a short (0) flash, in milliseconds.  The default value is 250; valid values are in the range [50..1000].
+    config.statusLED.shortFlashMS = 250;
+
+    // The duration of a long (1) flash, in milliseconds.  The default value is 750; valid values are in the range [100..2000].
+    config.statusLED.longFlashMS = 1000;
+
+    // The delay between flashes within a single message, in milliseconds.  The default value is 250; valid values are in the range [100..1000].
+    config.statusLED.interFlashDelayMS = 150;
+
+    // The delay between messages within a single cycle, in milliseconds.  The default value is 1000; valid values are in the range [500..3000].
+    config.statusLED.interMessageDelayMS = 1000;
+
+    // The delay between cycles, in milliseconds.  The default value is 2000; valid values are in the range [1000..10000].
+    config.statusLED.interCycleDelayMS = 4000;
+
+
+    /*
      * Outback interrogator configuration.
      */
 

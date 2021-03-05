@@ -186,20 +186,12 @@ These are the codes displayed by the status indicator. There may be multiple sta
 |1 |State of charge under 20%
 |10 |Batteries undertemperature
 |11 |Batteries overtemperature
-|00 |Barn router unreachable
-|01 |Shed router unreachable
-|000 |Internet unreachable
-|001 |CPO not connected
-|110 |Solid state relay failure
-|111 |Heater failure
-|1100 |Weather reports not being received
-|1101 |Outback MATE3S not responding
-|0000 |Battery thermocouple open circuit
-|0001 |Battery thermocouple shorted to Vcc
-|0010 |Battery thermocouple shorted to ground
-|0100 |Heater thermocouple open circuit
-|0101 |Heater thermocouple shorted to Vcc
-|0110 |Heater thermocouple shorted to ground
+|00 |Battery temperature not readable
+|01 |Heater output temperature not readable
+|000 |No data from Outback Mate3S
+|001 |Possible SSR failure
+|010 |Possible Sense relay failure
+|011 |Possible heater failure
 |===
 
 == How is ShedSolar licensed?

@@ -37,6 +37,7 @@ public class Config extends AConfig {
     public TestManager.Config          testManager        = new TestManager.Config();
     public ConsoleServer.Config        consoleServer      = new ConsoleServer.Config();
     public DatabaseLogger.Config       databaseLogger     = new DatabaseLogger.Config();
+    public StatusLED.Config            statusLED          = new StatusLED.Config();
 
 
     /**
@@ -57,5 +58,6 @@ public class Config extends AConfig {
         testManager        .verify( _messages );
         consoleServer      .verify( _messages );
         databaseLogger     .verify( _messages );
+        statusLED          .verify( _messages );
     }
 }
