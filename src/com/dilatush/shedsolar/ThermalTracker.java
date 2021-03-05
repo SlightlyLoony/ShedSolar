@@ -28,7 +28,6 @@ import static com.dilatush.shedsolar.Events.*;
  *
  * @author Tom Dilatush  tom@dilatush.com
  */
-// TODO: comment and document this...
 public class ThermalTracker {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
@@ -166,6 +165,9 @@ public class ThermalTracker {
     }
 
 
+    /**
+     * Create a TrackingCycle instance with the data we just finished collecting, and submit it for writing to a file.
+     */
     private void finalizeRecording() {
 
         LOGGER.log( Level.FINEST, () -> "Finalizing recording" );
@@ -183,6 +185,9 @@ public class ThermalTracker {
     }
 
 
+    /**
+     * Clear all our tracking data, and set tracking to {@code false} (not tracking).
+     */
     private void clear() {
 
         // stop tracking...
@@ -196,11 +201,14 @@ public class ThermalTracker {
     }
 
 
-    private final static DateTimeFormatter fileNameFormatter  = DateTimeFormatter.ofPattern( "yyyy-MM-dd_HH-mm-ss'.rec'" );
-    private final static DateTimeFormatter timestampFormatter = DateTimeFormatter.ofPattern( "yyyy/MM/dd HH:mm:ss" );
+    private final static DateTimeFormatter fileNameFormatter    = DateTimeFormatter.ofPattern( "yyyy-MM-dd_HH-mm-ss'.rec'" );
+    private final static DateTimeFormatter timestampFormatter   = DateTimeFormatter.ofPattern( "yyyy/MM/dd HH:mm:ss"       );
     private final static DecimalFormat     temperatureFormatter = new DecimalFormat( "##0.00" );
 
 
+    /**
+     * Contains the data from one tracking cycle, and records it into a file.  It also deletes older files.
+     */
     private static class TrackingCycle {
 
         private final List<TrackingRecord> records;
@@ -304,6 +312,9 @@ public class ThermalTracker {
     }
 
 
+    /**
+     * Contains the data from one tracking record (one per second).
+     */
     private static class TrackingRecord {
 
         private final float   batteryTemp;
@@ -311,6 +322,12 @@ public class ThermalTracker {
         private final Instant timestamp;
 
 
+        /**
+         * Creates a new instance of this class with the given temperatures.
+         *
+         * @param _batteryTemp The battery temperature in °C.
+         * @param _heaterTemp The heater output temperature in °C.
+         */
         private TrackingRecord( final float _batteryTemp, final float _heaterTemp ) {
             batteryTemp = _batteryTemp;
             heaterTemp  = _heaterTemp;

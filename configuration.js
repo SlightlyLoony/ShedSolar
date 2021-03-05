@@ -143,10 +143,13 @@ function init( config ) {
      * Database logger configuration.
      */
 
+    // The fully-qualified host name (or dotted-form IPv4 address) of the database server.  There is no default value.
     config.databaseLogger.host = "beast.dilatush.com";
 
+    // The user name for the database server.  There is no default value.
     config.databaseLogger.user = "shedsolar";
 
+    // The password for the database server.  There is no default value.
     config.databaseLogger.password = dbpassword;
 
 

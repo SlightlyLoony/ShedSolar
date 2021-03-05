@@ -131,6 +131,12 @@ If our calculated estimates don't match reality, one of two things will happen:
 
 Since a somewhat higher temperature would still be within the batteries' operating parameters, whereas a lower temperature might not be, it seems better to err on the warmer side -- so we are using a formula that includes a "safety tweak" in this direction.
 
+=== DatabaseLogger
+The `DatabaseLogger` has a simple job: once per minute, it writes a log record to the `shedsolar.log` table.  This table records a bunch of interesting data, including heater on time in the past minute, various temperatures, solar irradiance, and power production data from the Outback controller.
+
+=== ThermalTracker
+The `ThermalTracker` writes files containing heater output and battery temperature at one second intervals over the course of an entire heating cycle (from one heater on time to the next heater on time).  This data will be collected when ShedSolar is first installed, then used to calculate the thermal inertia and the insulation efficiency of the system.
+
 
 == Some implementation notes…
 
