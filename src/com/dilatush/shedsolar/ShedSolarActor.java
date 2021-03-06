@@ -81,7 +81,7 @@ public class ShedSolarActor extends Actor {
             // extract the data we want (irradiance and temperature) from the message...
             float solar = _message.getFloat( "solarIrradianceAvg" );
             float temp  = _message.getFloat( "temperatureAvg"     );
-            LOGGER.finest( String.format( "Weather message, solar irradiance is %1$.0f watts/meter2, temperature is %2$.1fC", solar, temp ) );
+            LOGGER.info( String.format( "Weather message, solar irradiance is %1$.0f watts/meter2, temperature is %2$.1fC", solar, temp ) );
 
             // publish our data...
             solarIrradianceSetter.accept( solar );

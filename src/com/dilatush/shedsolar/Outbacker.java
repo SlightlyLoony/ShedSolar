@@ -153,6 +153,7 @@ public class Outbacker {
             if( jsonResponse != null ) {
                 OutbackData data = new OutbackData( jsonResponse );
                 outbackSetter.accept( data );
+                LOGGER.info( () -> "Outback data received" );
                 LOGGER.finest( data::toString );
             }
 

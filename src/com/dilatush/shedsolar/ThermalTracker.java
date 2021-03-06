@@ -274,6 +274,8 @@ public class ThermalTracker {
                     // we're done writing, so close our writer...
                     writer.flush();
                     writer.close();
+
+                    LOGGER.info( () -> "Recorded thermal tracking in " + fileName );
                 }
                 else {
                     LOGGER.log( Level.SEVERE, "Could not create cycle tracking record" );
@@ -304,6 +306,8 @@ public class ThermalTracker {
                         break;
                     }
                 }
+
+                LOGGER.info( () -> "Number of thermal tracking files: " + files.size() );
             }
             catch( Exception _e ) {
                 LOGGER.log( Level.SEVERE, "Problem while recording thermal cycle", _e );

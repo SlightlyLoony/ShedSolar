@@ -197,6 +197,7 @@ public class HeaterControl {
         heaterSSR.low();
         heaterPowerLED.low();
         haps.post( Events.HEATER_ON, heaterOnTime );
+        LOGGER.info( () -> "Heater turned on" );
     }
 
 
@@ -209,6 +210,7 @@ public class HeaterControl {
         heaterPowerLED.high();
         if( heaterOnTime != null )
             haps.post( Events.HEATER_OFF, Duration.between( heaterOnTime, heaterOffTime ) );
+        LOGGER.info( () -> "Heater turned off" );
     }
 
 

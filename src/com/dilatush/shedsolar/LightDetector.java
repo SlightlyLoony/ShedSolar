@@ -135,12 +135,14 @@ public class LightDetector {
     // LIGHT on entry...
     private void lightOnEntry( final FSMState<State,Event> _state ) {
         lightSetter.accept( Mode.LIGHT );
+        LOGGER.info( () -> "Light mode is LIGHT" );
     }
 
 
     // DARK on entry...
     private void darkOnEntry( final FSMState<State,Event> _state ) {
         lightSetter.accept( Mode.DARK );
+        LOGGER.info( () -> "Light mode is DARK" );
     }
 
 

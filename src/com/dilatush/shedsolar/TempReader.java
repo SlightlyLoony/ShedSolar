@@ -87,6 +87,9 @@ public class TempReader {
     private final TestEnabler batteryRawTE;
     private final TestEnabler heaterRawTE;
 
+    // used to limit logging temperature to once per 15 seconds...
+    private int counter = 0;
+
 
     /**
      * Creates a new instance of this class, configured according to the given configuration file.
@@ -167,12 +170,32 @@ public class TempReader {
 
             // tell the world we've published...
             shedSolar.haps.post( TEMPERATURES_READ );
+
+            // log at info level once every 15 seconds...
+            if( ++counter >= 60 ) {
+                counter = 0;
+                LOGGER.info( this::temps );
+            }
         }
 
         // by definition, any exception caught here is, well, exceptional!
         catch( Exception _e ) {
             LOGGER.log( Level.SEVERE, "Unhandled exception when reading temperature", _e );
         }
+    }
+
+
+    private String temps() {
+        return "Temperatures: battery: " + temp( batteryTemperature ) + ", heater output: "
+                + temp( heaterTemperature ) + ", ambient: " + temp( ambientTemperature );
+    }
+
+
+    private String temp( final Info<Float> _temp ) {
+       if( _temp.isInfoAvailable() )
+           return String.format( "%1$.2f", _temp.getInfo() );
+       else
+           return "?";
     }
 
 
@@ -285,8 +308,10 @@ public class TempReader {
                 // well, we made another attempt...
                 attempts++;
 
-                LOGGER.finest( String.format( "Raw temperature read: %1$08x", rawReading ) );
+                int finalRawReading = rawReading;
+                LOGGER.info( () -> "Reading " + _name + " failed with " + Integer.toHexString( finalRawReading ));
             }
+            LOGGER.finest( String.format( "Raw temperature read: %1$08x", rawReading ) );
 
             return rawReading;
         }
