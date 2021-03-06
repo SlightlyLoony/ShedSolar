@@ -4,10 +4,7 @@ import com.dilatush.util.AConfig;
 import com.dilatush.util.SimpleConnectionPool;
 import com.dilatush.util.info.InfoSource;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Timestamp;
+import java.sql.*;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -133,7 +130,7 @@ public class DatabaseLogger {
                 if( _logRecord.lightMode.isInfoAvailable() )
                     ps.setString( 12, _logRecord.lightMode.getInfo() == Mode.LIGHT ? "LIGHT" : "DARK" );
                 else
-                    ps.setNull( 12, ps.getParameterMetaData().getParameterType( 12 ) );
+                    ps.setNull( 12, Types.VARCHAR );
 
                 // if we have Outback data, set it...
                 if( _logRecord.outbackData.isInfoAvailable() ) {
@@ -150,18 +147,20 @@ public class DatabaseLogger {
 
                 // otherwise, nulls for the outback data...
                 else {
-                    ps.setNull(  8, ps.getParameterMetaData().getParameterType(  8 ) );
-                    ps.setNull(  9, ps.getParameterMetaData().getParameterType(  9 ) );
-                    ps.setNull( 10, ps.getParameterMetaData().getParameterType( 10 ) );
-                    ps.setNull( 11, ps.getParameterMetaData().getParameterType( 11 ) );
-                    ps.setNull( 13, ps.getParameterMetaData().getParameterType( 13 ) );
-                    ps.setNull( 14, ps.getParameterMetaData().getParameterType( 14 ) );
-                    ps.setNull( 15, ps.getParameterMetaData().getParameterType( 15 ) );
-                    ps.setNull( 16, ps.getParameterMetaData().getParameterType( 16 ) );
+                    ps.setNull(  8, Types.DOUBLE );
+                    ps.setNull(  9, Types.DOUBLE );
+                    ps.setNull( 10, Types.DOUBLE );
+                    ps.setNull( 11, Types.DOUBLE );
+                    ps.setNull( 13, Types.DOUBLE );
+                    ps.setNull( 14, Types.DOUBLE );
+                    ps.setNull( 15, Types.DOUBLE );
+                    ps.setNull( 16, Types.DOUBLE );
                 }
 
                 // now we can execute our statement...
                 ps.execute();
+
+                LOGGER.info( () -> "Database log posted" );
             }
         }
         catch( Exception _e ) {
@@ -186,7 +185,7 @@ public class DatabaseLogger {
         if( _infoSource.isInfoAvailable() )
             _ps.setDouble( _index, _infoSource.getInfo() );
         else
-            _ps.setNull( _index, _ps.getParameterMetaData().getParameterType( _index ) );
+            _ps.setNull( _index, Types.DOUBLE );
     }
 
 
