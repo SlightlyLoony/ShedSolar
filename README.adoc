@@ -6,7 +6,9 @@ _ShedSolar_ is a program that provides several services related to the Outback s
 * Monitors the temperature of the batteries, providing alarm events for under-temperature (<0C, which might occur on heater failure) or over-temperature (>45C, which might occur if the batteries generate too much heat when the ambient temperature is high).
 * Interrogates the Outback Mate3S every 60 seconds (by default) through the standard JSON API, processes the result, and holds it internally.
 * Posts an event every 60 seconds. This event results in solar system data being published in our database.
-* Publishes a solar system report message every 60 seconds, which any MOP client can subscribe to.
+* Publishes a solar system status message every 60 seconds, which any MOP client can subscribe to.
+
+Another way to describe _ShedSolar_ is that it's the firmware for the world's most over-engineered thermostat.
 
 == Why does the world need ShedSolar?
 
@@ -192,6 +194,8 @@ These are the codes displayed by the status indicator. There may be multiple sta
 |001 |Possible SSR failure
 |010 |Possible Sense relay failure
 |011 |Possible heater failure
+|100 |No data from weather station
+|101 |Database log not posted
 |===
 
 == How is ShedSolar licensed?

@@ -7,7 +7,9 @@ import com.pi4j.io.gpio.GpioPinDigitalOutput;
 import com.pi4j.io.gpio.PinState;
 import com.pi4j.io.gpio.RaspiPin;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -24,16 +26,18 @@ public class StatusLED {
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
     // the messages the status LED can display...
-    private static final String OK                  = "S";
-    private static final String SOC_LOW             = "L";
-    private static final String BATTERY_LOW_TEMP    = "LS";
-    private static final String BATTERY_HIGH_TEMP   = "LL";
-    private static final String NO_BATTERY_TEMP     = "SS";
-    private static final String NO_HEATER_TEMP      = "SL";
-    private static final String NO_OUTBACK_DATA     = "SSS";
-    private static final String SSR_FAILURE         = "SSL";
-    private static final String SENSE_RELAY_FAILURE = "SLS";
-    private static final String HEATER_FAILURE      = "SLL";
+    private static final String OK                      = "S";
+    private static final String SOC_LOW                 = "L";
+    private static final String BATTERY_LOW_TEMP        = "LS";
+    private static final String BATTERY_HIGH_TEMP       = "LL";
+    private static final String NO_BATTERY_TEMP         = "SS";
+    private static final String NO_HEATER_TEMP          = "SL";
+    private static final String NO_OUTBACK_DATA         = "SSS";
+    private static final String SSR_FAILURE             = "SSL";
+    private static final String SENSE_RELAY_FAILURE     = "SLS";
+    private static final String HEATER_FAILURE          = "SLL";
+    private static final String NO_WEATHER_DATA         = "LSS";
+    private static final String DATABASE_LOG_NOT_POSTED = "LSL";
 
     private static final float MIN_BATTERY_TEMP = 0;
     private static final float MAX_BATTERY_TEMP = 45;
@@ -46,6 +50,7 @@ public class StatusLED {
     private volatile boolean possibleSSRFailure;
     private volatile boolean possibleSenseRelayFailure;
     private volatile boolean possibleHeaterFailure;
+    private volatile Instant lastDatabaseLogPosted = Instant.now( Clock.systemUTC() );
 
 
     public StatusLED( final Config _config ) {
@@ -70,9 +75,15 @@ public class StatusLED {
         ss.haps.subscribe( HEATER_WORKING,               this::heaterWorking     );
         ss.haps.subscribe( SSR_WORKING,                  this::ssrWorking        );
         ss.haps.subscribe( SENSE_RELAY_WORKING,          this::senseRelayWorking );
+        ss.haps.subscribe( DATABASE_LOG_POSTED,          this::databaseLogPosted );
 
         // start our first cycle...
         startCycle();
+    }
+
+
+    private void databaseLogPosted() {
+        lastDatabaseLogPosted = Instant.now( Clock.systemUTC() );
     }
 
 
@@ -171,9 +182,10 @@ public class StatusLED {
         StringBuilder result = new StringBuilder( 100 );
 
         // collect some information sources...
-        InfoSource<OutbackData> outback = ss.outback.getInfoSource();
-        InfoSource<Float> battery       = ss.batteryTemperature.getInfoSource();
-        InfoSource<Float> heater        = ss.heaterTemperature.getInfoSource();
+        InfoSource<OutbackData> outback   = ss.outback.getInfoSource();
+        InfoSource<Float> battery         = ss.batteryTemperature.getInfoSource();
+        InfoSource<Float> heater          = ss.heaterTemperature.getInfoSource();
+        InfoSource<Float> solarIrradiance = ss.solarIrradiance.getInfoSource();
 
         // check for SOC (state of charge) low...
         if( outback.isInfoAvailable() && outback.getInfo().stateOfCharge < 20 )
@@ -194,8 +206,18 @@ public class StatusLED {
         }
 
         // check our Outback data...
-        if( !outback.isInfoAvailable() )
+        if( !outback.isInfoAvailable()
+                || outback.getInfoTimestamp().isBefore( Instant.now( Clock.systemUTC() ).minusSeconds( 600 ) ) )
             append( result, NO_OUTBACK_DATA );
+
+        // check our weather data (by seeing if we have fresh solar irradiance)...
+        if( !solarIrradiance.isInfoAvailable()
+                ||  solarIrradiance.getInfoTimestamp().isBefore( Instant.now( Clock.systemUTC() ).minusSeconds( 600 ) ) )
+            append( result, NO_WEATHER_DATA );
+
+        // check whether we've posted a database log recently...
+        if( lastDatabaseLogPosted.isBefore( Instant.now( Clock.systemUTC() ).minusSeconds( 300 ) ) )
+            append( result, DATABASE_LOG_NOT_POSTED );
 
         // check our failure modes...
         if( possibleHeaterFailure )

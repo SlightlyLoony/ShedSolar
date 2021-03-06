@@ -161,6 +161,7 @@ public class DatabaseLogger {
                 ps.execute();
 
                 LOGGER.info( () -> "Database log posted" );
+                ss.haps.post( DATABASE_LOG_POSTED );
             }
         }
         catch( Exception _e ) {

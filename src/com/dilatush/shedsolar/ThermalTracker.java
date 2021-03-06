@@ -172,9 +172,6 @@ public class ThermalTracker {
 
         LOGGER.log( Level.FINEST, () -> "Finalizing recording" );
 
-        // our stop time...
-        stopTime.set( Instant.now( Clock.systemUTC() ) );
-
         // do the file recording in another thread...
         TrackingCycle cycle = new TrackingCycle( records.get(), startTime.get(), stopTime.get(), ambientTemp.get(), outsideTemp.get() );
         shedSolar.executor.submit( cycle::record );
