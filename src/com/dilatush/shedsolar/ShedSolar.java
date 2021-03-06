@@ -75,6 +75,7 @@ public class ShedSolar {
     private ThermalTracker           thermalTracker;
     private DatabaseLogger           databaseLogger;
     private StatusLED                statusLED;
+    private EventSender              eventSender;
     private GpioController           gpio;
 
 
@@ -229,6 +230,9 @@ public class ShedSolar {
 
             // set up our status LED...
             statusLED = new StatusLED( config.statusLED );
+
+            // set up our event sender...
+            eventSender = new EventSender( po );
         }
 
         // if we get ANY exception during the app startup, we consider it to be fatal...

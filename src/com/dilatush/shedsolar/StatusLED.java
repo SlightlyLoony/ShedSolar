@@ -53,6 +53,11 @@ public class StatusLED {
     private volatile Instant lastDatabaseLogPosted = Instant.now( Clock.systemUTC() );
 
 
+    /**
+     * Create a new instance of this class with the given configuration.
+     *
+     * @param _config the configuration
+     */
     public StatusLED( final Config _config ) {
 
         // squirrel away our configuration...
@@ -81,6 +86,10 @@ public class StatusLED {
         startCycle();
     }
 
+
+    /****************************
+     *  H A P   H A N D L E R S
+     ****************************/
 
     private void databaseLogPosted() {
         lastDatabaseLogPosted = Instant.now( Clock.systemUTC() );
@@ -117,6 +126,9 @@ public class StatusLED {
     }
 
 
+    /**
+     * Start a cycle of the status LED, which may include 1 or more messages.
+     */
     private void startCycle() {
 
         // get the string with our cycle's worth of messages...

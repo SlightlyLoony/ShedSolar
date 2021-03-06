@@ -193,6 +193,8 @@ public class HeaterControl {
      * Turn on the heater and the heater LED.
      */
     private void heaterOn() {
+        if( heaterSSR.isLow() )
+            return;
         heaterOnTime = Instant.now(Clock.systemUTC() );
         heaterSSR.low();
         heaterPowerLED.low();
@@ -205,6 +207,8 @@ public class HeaterControl {
      * Turn off the heater and the heater LED.
      */
     private void heaterOff() {
+        if( heaterSSR.isHigh() )
+            return;
         Instant heaterOffTime = Instant.now( Clock.systemUTC() );
         heaterSSR.high();
         heaterPowerLED.high();

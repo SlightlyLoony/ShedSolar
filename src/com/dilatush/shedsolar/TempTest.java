@@ -20,9 +20,6 @@ import java.util.logging.Logger;
  */
 public class TempTest {
 
-    // TODO: measure CPU consumption of temperature reading and filtering
-    // TODO: read temperature blocks - should it be on separate thread?  How long does it block for?
-
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
     private SpiDevice batteryTemp;
