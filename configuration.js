@@ -232,11 +232,11 @@ function init( config ) {
 
     // The lowest battery temperature (in degrees Celcius) allowed when in dark mode.  This value must be in the range [-10..25], and it must
     // be less than darkHighTemp and less than lightLowTemp.  Its default value is 0C.
-    config.heaterControl.darkLowTemp = 0;
+    config.heaterControl.darkLowTemp = 5;
 
     // The highest battery temperature (in degrees Celcius) allowed when in dark mode.  This value must be in the range [-10..25], and it must
     // be greater than darkLowTemp and less than lightHighTemp.  Its default value is 5C.
-    config.heaterControl.darkHighTemp = 5;
+    config.heaterControl.darkHighTemp = 10;
 
     // The lowest battery temperature (in degrees Celcius) allowed when in light mode.  This value must be in the range [0..40], and it must
     // be less than lightHighTemp and greater than darkLowTemp.  Its default value is 25C.
@@ -378,7 +378,6 @@ function init( config ) {
     // Any number of providers may be included as long as their names are unique.  The same provider may be provisioned under multiple names.
     config.consoleServer.providers.put( "test", "com.dilatush.util.test.TestConsoleProvider" );
     config.consoleServer.providers.put( "app", "com.dilatush.shedsolar.ShedSolarConsole" );
-
 
 
     /*

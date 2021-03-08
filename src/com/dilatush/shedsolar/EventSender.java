@@ -9,6 +9,9 @@ import com.dilatush.util.info.InfoSource;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.logging.Logger;
+
+import static com.dilatush.shedsolar.Events.*;
 
 /**
  * Posts events (via MOP) to the events system on beast.
@@ -16,6 +19,8 @@ import java.time.Instant;
  * @author Tom Dilatush  tom@dilatush.com
  */
 public class EventSender extends Actor {
+
+    private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
     private static final String eventSenderName = "events";
 
@@ -34,9 +39,10 @@ public class EventSender extends Actor {
         super( _po, eventSenderName );
 
         // subscribe to the haps we want to use...
-        ss.haps.subscribe( Events.HEATER_NO_START, this::heaterNoStart );
-        ss.haps.subscribe( Events.HEATER_ON,       this::heaterOn );
-        ss.haps.subscribe( Events.HEATER_OFF,      this::heaterOff );
+        ss.haps.subscribe( HEATER_NO_START, this::heaterNoStart );
+        ss.haps.subscribe( HEATER_ON,       this::heaterOn );
+        ss.haps.subscribe( HEATER_OFF,      this::heaterOff );
+        ss.haps.subscribe( BAD_TEMP_READ,   this::badRead );
 
         // set our periodic check schedules...
         ss.scheduledExecutor.scheduleAtFixedRate( this::perHour,     Duration.ofSeconds( 60 * 60 ), Duration.ofSeconds( 60 * 60 ) );
@@ -116,6 +122,12 @@ public class EventSender extends Actor {
     }
 
 
+    private void badRead( final Object _message ) {
+        String msg = (_message instanceof String) ? (String) _message : "Bad message";
+        sendEvent( "temperature.badRead", "temperature.badRead", 3, msg, msg );
+    }
+
+
     /**
      * Send an event via MOP, with the given parameters.
      *
@@ -140,5 +152,7 @@ public class EventSender extends Actor {
         msg.putDotted( "event.subject", _subject           );
 
         mailbox.send( msg );
+
+        LOGGER.finest( () -> "Sent event: " + _type );
     }
 }

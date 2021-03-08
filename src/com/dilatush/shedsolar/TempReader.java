@@ -310,6 +310,26 @@ public class TempReader {
 
                 int finalRawReading = rawReading;
                 LOGGER.info( () -> "Reading " + _name + " failed with " + Integer.toHexString( finalRawReading ));
+
+                // if we just made the third attempt and failed, send a hap...
+                if( attempts == 3 ) {
+
+                    // make a nice message...
+                    StringBuilder msg = new StringBuilder();
+                    msg.append( "Read " );
+                    msg.append( _name );
+                    msg.append( " with raw " );
+                    msg.append( Integer.toHexString( finalRawReading ) );
+                    if( (finalRawReading & SHORT_TO_GND_MASK) != 0 )
+                        msg.append( ", shorted to ground" );
+                    if( (finalRawReading & SHORT_TO_VCC_MASK) != 0 )
+                        msg.append( ", shorted to Vcc" );
+                    if( (finalRawReading & OPEN_MASK) != 0 )
+                        msg.append( ", open" );
+
+                    // set the hap...
+                    shedSolar.haps.post( BAD_TEMP_READ, msg.toString() );
+                }
             }
             LOGGER.finest( String.format( "Raw temperature read: %1$08x", rawReading ) );
 

@@ -1,0 +1,20 @@
+[Unit]
+Description=ShedSolar firmware
+After=syslog.target
+
+[Service]
+User=tom
+Type=simple
+WorkingDirectory=/apps/shedsolar
+ExecStart=/usr/bin/java -jar /apps/shedsolar/ShedSolar.jar
+
+# 143 is the exit code of a Java process stopped by a TERM, which is what systemd tries first when stopping a process
+SuccessExitStatus=143
+
+# give the process time to stop gracefully; after this time a hard KILL is sent..
+TimeoutStopSec=10
+
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

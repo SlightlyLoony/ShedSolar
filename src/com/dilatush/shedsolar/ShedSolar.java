@@ -76,6 +76,7 @@ public class ShedSolar {
     private DatabaseLogger           databaseLogger;
     private StatusLED                statusLED;
     private EventSender              eventSender;
+    private Monitor                  monitor;
     private GpioController           gpio;
 
 
@@ -233,6 +234,9 @@ public class ShedSolar {
 
             // set up our event sender...
             eventSender = new EventSender( po );
+
+            // set up our monitor...
+            monitor = new Monitor( po );
         }
 
         // if we get ANY exception during the app startup, we consider it to be fatal...
