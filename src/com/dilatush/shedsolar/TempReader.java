@@ -316,16 +316,17 @@ public class TempReader {
 
                     // make a nice message...
                     StringBuilder msg = new StringBuilder();
-                    msg.append( "Read " );
+                    msg.append( "Bad temperature read from " );
                     msg.append( _name );
-                    msg.append( " with raw " );
+                    msg.append( ", raw " );
                     msg.append( Integer.toHexString( finalRawReading ) );
+                    msg.append( ", meaning" );
                     if( (finalRawReading & SHORT_TO_GND_MASK) != 0 )
-                        msg.append( ", shorted to ground" );
+                        msg.append( " shorted to ground" );
                     if( (finalRawReading & SHORT_TO_VCC_MASK) != 0 )
-                        msg.append( ", shorted to Vcc" );
+                        msg.append( " shorted to Vcc" );
                     if( (finalRawReading & OPEN_MASK) != 0 )
-                        msg.append( ", open" );
+                        msg.append( " open" );
 
                     // set the hap...
                     shedSolar.haps.post( BAD_TEMP_READ, msg.toString() );

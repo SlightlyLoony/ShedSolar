@@ -49,7 +49,8 @@ public class OutbackData {
         double tTodayKwhIn       = 0;
         double tTodayKwhOut      = 0;
         double tPanelCurrent     = 0;
-        double tInverterCurrent  = 0;
+        double tInverterCurrent1  = 0;
+        double tInverterCurrent2  = 0;
         double tInverterVoltage1 = 0;
         double tInverterVoltage2 = 0;
 
@@ -60,15 +61,22 @@ public class OutbackData {
             JSONObject port = ports.getJSONObject( i );
             int portNum = port.getInt( "Port" );
             switch( portNum ) {
+
+                // GS: Radian inverter/charger...
                 case 1:
                     tInverterVoltage1 = port.getDouble( "VAC_out_L1" );
                     tInverterVoltage2 = port.getDouble( "VAC_out_L2" );
+                    tInverterCurrent1 = port.getDouble( "Inv_I_L1" );
+                    tInverterCurrent2 = port.getDouble( "Inv_I_L2" );
                     break;
+
+                // CC: charge controller...
                 case 9:
                     tPanelVoltage   = port.getDouble( "In_V" );
                     tPanelCurrent   = port.getDouble( "In_I" );
-                    tInverterCurrent  = port.getDouble( "Out_I" );
                     break;
+
+                // FNDC: FLEXnet DC, DC system monitoring...
                 case 10:
                     tBatteryVoltage = port.getDouble( "Batt_V" );
                     tStateOfCharge  = port.getDouble( "SOC" );
@@ -83,11 +91,13 @@ public class OutbackData {
         stateOfCharge   = tStateOfCharge;
         todayKwhIn      = tTodayKwhIn;
         todayKwhOut     = tTodayKwhOut;
-        inverterCurrent = tInverterCurrent;
-        inverterVoltage = tInverterVoltage1 + tInverterVoltage2;
+        inverterCurrent = tInverterCurrent1 + tInverterCurrent2;  // this is actually giving me the total current at 120VAC; a bit weird...
+        inverterVoltage = tInverterVoltage1 + tInverterVoltage2;  // this darned well be 240VAC or thereabouts!
         panelCurrent    = tPanelCurrent;
         panelPower      = panelCurrent * panelVoltage;
-        inverterPower   = inverterCurrent * inverterVoltage;
+
+        // this is required because current could be MUCH different on each leg...
+        inverterPower   = (tInverterCurrent1 * tInverterVoltage1) + (tInverterCurrent2 * tInverterVoltage2);
 
         LOGGER.finest( toString() );
     }
