@@ -250,7 +250,7 @@ function init( config ) {
 
     // The minimum temperature increase (in °C) from the heater output thermocouple to verify that the heater is working.  The default is 10°C, valid
     // values are in the range [5..30].
-    config.heaterControl.normal.confirmOnDelta = 10;
+    config.heaterControl.normal.confirmOnDelta = 5;
 
     // The maximum time, in milliseconds, to wait for confirmation of the heater working (by sensing the temperature increase on the heater output
     // thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
@@ -264,7 +264,7 @@ function init( config ) {
 
     // The minimum temperature decrease (in °C) from the heater output thermocouple to verify that the heater is working.  The default is
     //  -10°C, valid values are in the range [-30..-5].  Note that the value is negative (indicating a temperature drop).
-    config.heaterControl.normal.confirmOffDelta = -10;
+    config.heaterControl.normal.confirmOffDelta = -5;
 
     // The maximum time, in milliseconds, to wait for confirmation of the heater turning off (by sensing the temperature decrease on the
     // heater output thermocouple).  The default is 30,000 (30 seconds); valid values are in the range [10,000..600,000].
