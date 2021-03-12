@@ -123,6 +123,9 @@ public class BatteryOnlyHeaterController implements HeaterController {
 
         LOGGER.finest( () -> "Battery-only heater controller OFF:LOW_BATTERY_TEMP" );
 
+        // record our starting temperature (so we can sense the temperature rise)...
+        startingTemp = context.batteryTemp.getInfo();
+
         // number of times we've tried to zero...
         turnOnTries = 0;
     }
@@ -211,9 +214,6 @@ public class BatteryOnlyHeaterController implements HeaterController {
     private void onEntry_ConfirmSSROn( final FSMState<State, Event> _state ) {
 
         LOGGER.finest( () -> "Battery-only heater controller on entry to CONFIRM_SSR_ON" );
-
-        // record our starting temperature (so we can sense the temperature rise)...
-        startingTemp = context.batteryTemp.getInfo();
 
         // turn on the heater and the heater LED...
         context.heaterOn.run();

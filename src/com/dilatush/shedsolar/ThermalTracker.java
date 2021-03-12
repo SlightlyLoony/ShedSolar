@@ -159,9 +159,15 @@ public class ThermalTracker {
             return;
         }
 
+        // on the other hand, if we can't get ambient or outside temperatures, we'll just make them a special value (-100) and record anyway...
+        InfoSource<Float> ambientSource = shedSolar.ambientTemperature.getInfoSource();
+        InfoSource<Float> outsideSource = shedSolar.outsideTemperature.getInfoSource();
+        float outside = (outsideSource.isInfoAvailable() ? outsideSource.getInfo() : -100.0f );
+        float ambient = (ambientSource.isInfoAvailable() ? ambientSource.getInfo() : -100.0f );
+
         // we have valid temperatures, so record them...
         LOGGER.log( Level.FINEST, () -> "Recording temperatures" );
-        records.get().add( new TrackingRecord( batterySource.getInfo(), heaterSource.getInfo() ) );
+        records.get().add( new TrackingRecord( batterySource.getInfo(), heaterSource.getInfo(), outside, ambient ) );
     }
 
 
@@ -264,7 +270,8 @@ public class ThermalTracker {
                     for( TrackingRecord record : records ) {
                         ZonedDateTime localTimestamp = ZonedDateTime.ofInstant( record.timestamp, ZoneId.of( "America/Denver" ) );
                         writer.write( timestampFormatter.format( localTimestamp ) + ","
-                                + temperatureFormatter.format( record.batteryTemp ) + "," + temperatureFormatter.format( record.heaterTemp ) );
+                                + temperatureFormatter.format( record.batteryTemp ) + "," + temperatureFormatter.format( record.heaterTemp ) + ","
+                                + temperatureFormatter.format( record.ambientTemp ) + "," + temperatureFormatter.format( record.outsideTemp ) );
                         writer.newLine();
                     }
 
@@ -320,6 +327,8 @@ public class ThermalTracker {
 
         private final float   batteryTemp;
         private final float   heaterTemp;
+        private final float   ambientTemp;
+        private final float   outsideTemp;
         private final Instant timestamp;
 
 
@@ -329,9 +338,11 @@ public class ThermalTracker {
          * @param _batteryTemp The battery temperature in °C.
          * @param _heaterTemp The heater output temperature in °C.
          */
-        private TrackingRecord( final float _batteryTemp, final float _heaterTemp ) {
+        private TrackingRecord( final float _batteryTemp, final float _heaterTemp, final float _outsideTemp, final float _ambientTemp ) {
             batteryTemp = _batteryTemp;
             heaterTemp  = _heaterTemp;
+            ambientTemp = _ambientTemp;
+            outsideTemp = _outsideTemp;
             timestamp   = Instant.now( Clock.systemUTC() );
         }
     }
