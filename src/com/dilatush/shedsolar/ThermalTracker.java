@@ -2,10 +2,7 @@ package com.dilatush.shedsolar;
 
 import com.dilatush.util.info.InfoSource;
 
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.OutputStreamWriter;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.time.*;
@@ -23,8 +20,8 @@ import static com.dilatush.shedsolar.Events.*;
 
 /**
  * Records battery and heater temperatures each time they're published, as well as heater on and off times, for each normal heater cycle, defined
- * as heater on to heater on.  Recording lasts three hours at most; after that we assume something went horribly wrong.  The most recent 50 successful
- * cycle recordings are stored in text files in the "recordings" subdirectory, with file names reflecting the UTC time the recording started.
+ * as heater on to heater on.  The most recent 50 successful cycle recordings are stored in text files in the "recordings" subdirectory, with file
+ * names reflecting the UTC time the recording started.
  *
  * @author Tom Dilatush  tom@dilatush.com
  */
@@ -32,20 +29,13 @@ public class ThermalTracker {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
-    private static final int MAX_RECORDING_TIME_MINUTES = 180;
-    private static final int MAX_TEMPERATURE_RECORDS    = MAX_RECORDING_TIME_MINUTES * 60;
     private static final int MAX_RECORDINGS             = 50;
     private static final String RECORDINGS_DIRECTORY    = "recordings";
 
     private final ShedSolar shedSolar = ShedSolar.instance;
 
-    private final AtomicBoolean                         tracking;     // true if we're currently tracking (IOW, we're in a heater cycle)...
-    private final AtomicReference<Instant>              startTime;    // the time we started this heater cycle...
-    private final AtomicReference<Instant>              stopTime;     // the time we stopped the heater on this heater cycle...
-    private final AtomicReference<Float>                ambientTemp;  // the ambient temperature at the start of this heater cycle...
-    private final AtomicReference<Float>                outsideTemp;  // the outside temperature at the start of this heater cycle...
-    private final AtomicReference<List<TrackingRecord>> records;      // the temperature records we've received...
-
+    private final AtomicBoolean                   tracking;     // true if we're currently tracking (IOW, we're in a heater cycle)...
+    private final AtomicReference<BufferedWriter> writer;       // writer for the tracking file...
 
 
     /**
@@ -53,16 +43,9 @@ public class ThermalTracker {
      */
     public ThermalTracker() {
 
-        // initialize all our atomics...
+        // initialize...
         tracking    = new AtomicBoolean( false );
-        startTime   = new AtomicReference<>( null );
-        stopTime    = new AtomicReference<>( null );
-        ambientTemp = new AtomicReference<>( null );
-        outsideTemp = new AtomicReference<>( null );
-        records     = new AtomicReference<>( null );
-
-        // initialize our tracking list...
-        records.set( new ArrayList<>( MAX_TEMPERATURE_RECORDS ) );
+        writer        = new AtomicReference<>(null);
 
         // subscribe to the haps we care about...
         shedSolar.haps.subscribe( NORMAL_HEATER_ON,       this::heaterOn      );
@@ -72,6 +55,9 @@ public class ThermalTracker {
         // schedule our once-per-second temperature readings...
         shedSolar.scheduledExecutor.scheduleAtFixedRate( this::temperaturesRead, Duration.ZERO, Duration.ofSeconds( 1 ) );
     }
+
+
+    private enum RecordType { ON, OFF, TEMP }
 
 
     /**
@@ -85,24 +71,80 @@ public class ThermalTracker {
 
         LOGGER.log( Level.FINEST, () -> "Tracking started" );
 
+        /* start up a new tracking session */
+
         // indicate we are tracking...
         tracking.set( true );
 
-        // set the start time for our new recording...
-        startTime.set( Instant.now( Clock.systemUTC() ) );
+        try {
+            // set up our buffered writer...
+            Instant startTime = Instant.now( Clock.systemUTC() );
+            ZonedDateTime localStartTime = ZonedDateTime.ofInstant( startTime, ZoneId.of( "America/Denver" ) );
+            DateTimeFormatter fileNameFormatter    = DateTimeFormatter.ofPattern( "yyyy-MM-dd_HH-mm-ss'.rec'" );
+            String fileName = fileNameFormatter.format( localStartTime );
+            File recording = new File( RECORDINGS_DIRECTORY + "/" + fileName );
+            LOGGER.log( Level.FINEST, () -> "File: " + recording.getAbsolutePath() );
+            writer.set( new BufferedWriter( new OutputStreamWriter( new FileOutputStream( recording ), StandardCharsets.UTF_8 ) ) );
 
-        // remember the ambient and outside temperatures for recording purposes...
-        InfoSource<Float> ambientSource = shedSolar.ambientTemperature.getInfoSource();
-        InfoSource<Float> outsideSource = shedSolar.outsideTemperature.getInfoSource();
-        if( !ambientSource.isInfoAvailable() || !outsideSource.isInfoAvailable() ) {
-            LOGGER.log( Level.WARNING, "Ambient temperature and outside temperature are not both available; abandoning tracking for this cycle" );
-            clear();
-            return;
+            // write out the "heater on" record...
+            writeRecord( startTime, RecordType.ON, null );
+
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            // TODO: handle this error...
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        ambientTemp.set( ambientSource.getInfo() );
-        outsideTemp.set( outsideSource.getInfo() );
     }
 
+
+    private final static DateTimeFormatter timestampFormatter   = DateTimeFormatter.ofPattern( "yyyy/MM/dd HH:mm:ss"       );
+
+    /**
+     * Writes a single record out to the recording file, with the given timestamp, type, and optional fields.  The fields must have commas
+     * between them, but no leading comma.
+     *
+     * @param _timestamp The timestamp for this record.
+     * @param _type The type of this record.
+     * @param _fields The (optional) fields for this record.
+     */
+    private void writeRecord( final Instant _timestamp, final RecordType _type, final String _fields ) throws IOException {
+
+        BufferedWriter bw = writer.get();
+
+        // write out the record type...
+        switch( _type ) {
+            case ON:   bw.write( 'O' ); break;
+            case OFF:  bw.write( 'F' ); break;
+            case TEMP: bw.write( 'T' ); break;
+        }
+        bw.write( ',' );
+
+        // write out the timestamp...
+        bw.write( timestampFormatter.format( _timestamp ) );
+
+        // if we have fields, write them out...
+        if( _fields != null ) {
+            bw.write( ',' );
+            bw.write( _fields );
+        }
+
+        // end the line...
+        bw.newLine();
+        bw.flush();
+    }
+
+
+    private final static DecimalFormat     temperatureFormatter = new DecimalFormat( "##0.00" );
+
+    /**
+     *
+     * @param _temp
+     * @return
+     */
+    private String getTemp( final InfoSource<Float> _temp ) {
+
+    }
 
     /**
      * Called when there's a normal heater controller running and the heater has just been turned off.
@@ -205,8 +247,6 @@ public class ThermalTracker {
 
 
     private final static DateTimeFormatter fileNameFormatter    = DateTimeFormatter.ofPattern( "yyyy-MM-dd_HH-mm-ss'.rec'" );
-    private final static DateTimeFormatter timestampFormatter   = DateTimeFormatter.ofPattern( "yyyy/MM/dd HH:mm:ss"       );
-    private final static DecimalFormat     temperatureFormatter = new DecimalFormat( "##0.00" );
 
 
     /**
