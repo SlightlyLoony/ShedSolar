@@ -7,7 +7,6 @@ import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
@@ -36,6 +35,7 @@ public class ThermalTracker {
 
     private final AtomicBoolean                   tracking;     // true if we're currently tracking (IOW, we're in a heater cycle)...
     private final AtomicReference<BufferedWriter> writer;       // writer for the tracking file...
+    private final AtomicReference<File>           file;         // the file we're writing to (just in case we need to delete it)...
 
 
     /**
@@ -45,7 +45,8 @@ public class ThermalTracker {
 
         // initialize...
         tracking    = new AtomicBoolean( false );
-        writer        = new AtomicReference<>(null);
+        writer      = new AtomicReference<>( null );
+        file        = new AtomicReference<>( null );
 
         // subscribe to the haps we care about...
         shedSolar.haps.subscribe( NORMAL_HEATER_ON,       this::heaterOn      );
@@ -57,44 +58,81 @@ public class ThermalTracker {
     }
 
 
+    /* event and schedule listeners; they all just start a worker thread to do their actual work */
+
+
+    private void heaterOn() {
+        shedSolar.executor.submit( this::heaterOnImpl );
+    }
+
+
+    private void heaterOff() {
+        shedSolar.executor.submit( this::heaterOffImpl );
+    }
+
+
+    private void heaterNoStart() {
+        shedSolar.executor.submit( this::heaterNoStartImpl );
+    }
+
+
+    private void temperaturesRead() {
+        shedSolar.executor.submit( this::temperaturesReadImpl );
+    }
+
+
     private enum RecordType { ON, OFF, TEMP }
 
 
     /**
      * Called when there's a normal heater controller running and the heater has just been turned on.
      */
-    private void heaterOn() {
+    private void heaterOnImpl() {
+
+        // capture a precise start time (as finalizeRecording could take several seconds)...
+        Instant startTime = Instant.now( Clock.systemUTC() );
+        ZonedDateTime localStartTime = ZonedDateTime.ofInstant( startTime, ZoneId.of( "America/Denver" ) );
 
         // if we have a recording underway, finalize it...
         if( tracking.get() )
             finalizeRecording();
 
-        LOGGER.log( Level.FINEST, () -> "Tracking started" );
+        LOGGER.log( Level.FINEST, () -> "Heater on: Tracking started" );
 
         /* start up a new tracking session */
 
-        // indicate we are tracking...
-        tracking.set( true );
-
         try {
             // set up our buffered writer...
-            Instant startTime = Instant.now( Clock.systemUTC() );
-            ZonedDateTime localStartTime = ZonedDateTime.ofInstant( startTime, ZoneId.of( "America/Denver" ) );
             DateTimeFormatter fileNameFormatter    = DateTimeFormatter.ofPattern( "yyyy-MM-dd_HH-mm-ss'.rec'" );
             String fileName = fileNameFormatter.format( localStartTime );
-            File recording = new File( RECORDINGS_DIRECTORY + "/" + fileName );
-            LOGGER.log( Level.FINEST, () -> "File: " + recording.getAbsolutePath() );
-            writer.set( new BufferedWriter( new OutputStreamWriter( new FileOutputStream( recording ), StandardCharsets.UTF_8 ) ) );
+            file.set( new File( RECORDINGS_DIRECTORY + "/" + fileName ) );
+            LOGGER.log( Level.FINEST, () -> "File: " + file.get().getAbsolutePath() );
+            writer.set( new BufferedWriter( new OutputStreamWriter( new FileOutputStream( file.get() ), StandardCharsets.UTF_8 ) ) );
 
             // write out the "heater on" record...
             writeRecord( startTime, RecordType.ON, null );
 
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-            // TODO: handle this error...
-        } catch (IOException e) {
-            e.printStackTrace();
+            // indicate we are tracking...
+            tracking.set( true );
+
+        } catch( IOException _e ) {
+            handleFileError( _e );
         }
+    }
+
+
+    private void handleFileError( final IOException _e ) {
+
+        LOGGER.log( Level.SEVERE, "File error while writing thermal tracking information: " + _e.getMessage(), _e );
+
+        // make sure we've closed our writer and turned tracking off...
+        try {
+            writer.get().close();
+        } catch (IOException e) {
+            // naught to do here, so just ignore the exception...
+        }
+        writer.set( null );
+        tracking.set( false );
     }
 
 
@@ -108,50 +146,69 @@ public class ThermalTracker {
      * @param _type The type of this record.
      * @param _fields The (optional) fields for this record.
      */
-    private void writeRecord( final Instant _timestamp, final RecordType _type, final String _fields ) throws IOException {
+    private void writeRecord( final Instant _timestamp, final RecordType _type, final String _fields ) {
 
         BufferedWriter bw = writer.get();
 
-        // write out the record type...
-        switch( _type ) {
-            case ON:   bw.write( 'O' ); break;
-            case OFF:  bw.write( 'F' ); break;
-            case TEMP: bw.write( 'T' ); break;
-        }
-        bw.write( ',' );
-
-        // write out the timestamp...
-        bw.write( timestampFormatter.format( _timestamp ) );
-
-        // if we have fields, write them out...
-        if( _fields != null ) {
+        try {
+            // write out the record type...
+            switch( _type ) {
+                case ON:   bw.write( 'O' ); break;
+                case OFF:  bw.write( 'F' ); break;
+                case TEMP: bw.write( 'T' ); break;
+            }
             bw.write( ',' );
-            bw.write( _fields );
-        }
 
-        // end the line...
-        bw.newLine();
-        bw.flush();
+            // write out the timestamp...
+            bw.write( timestampFormatter.format( _timestamp ) );
+
+            // if we have fields, write them out...
+            if( _fields != null ) {
+                bw.write( ',' );
+                bw.write( _fields );
+            }
+
+            // end the line...
+            bw.newLine();
+            bw.flush();
+
+        } catch (IOException _e) {
+            handleFileError( _e );
+        }
     }
 
 
     private final static DecimalFormat     temperatureFormatter = new DecimalFormat( "##0.00" );
 
     /**
+     * Returns a string representing the temperature in °C, "OLD" if the data is more than two minutes old, or
+     * "MISSING" if the data is unavailable.
      *
-     * @param _temp
-     * @return
+     * @param _temp The {@link InfoSource} for the temperature to stringify.
+     * @return the string representing the given temperature
      */
     private String getTemp( final InfoSource<Float> _temp ) {
 
+        // if the data is unavailable, we know what to do...
+        if( !_temp.isInfoAvailable() )
+            return "MISSING";
+
+        // is the data more than two minutes old?
+        Duration delta = Duration.between( _temp.getInfoTimestamp(), Instant.now( Clock.systemUTC() ) );
+        if( delta.compareTo(Duration.ofMinutes( 2 ) )  > 0 )
+            return "OLD";
+
+        // we have data, and it is fresh, so spit it out...
+        return temperatureFormatter.format( _temp.getInfo() );
     }
+
 
     /**
      * Called when there's a normal heater controller running and the heater has just been turned off.
      */
-    private void heaterOff() {
+    private void heaterOffImpl() {
         LOGGER.log( Level.FINEST, () -> "Heater off" );
-        stopTime.set( Instant.now( Clock.systemUTC() ) );
+        writeRecord( Instant.now( Clock.systemUTC() ), RecordType.OFF, null );
     }
 
 
@@ -159,57 +216,47 @@ public class ThermalTracker {
      * Called when there's a normal heater controller running and the heater has failed to start.  This causes the tracker to abandon the tracking
      * for the current cycle.
      */
-    private void heaterNoStart() {
+    private void heaterNoStartImpl() {
+
         LOGGER.log( Level.FINEST, () -> "Heater no start" );
-        clear();
+
+        // close the writer...
+        try {
+            writer.get().close();
+        }
+        catch( IOException _e ) {
+            // naught to do; just ignore it...
+        }
+
+        // erase the file...
+        if( !file.get().delete() )
+            LOGGER.warning( "Failed to delete thermal tracking file: " + file.get().getName() );
+
+        // get ready for a new start...
+        writer.set( null );
+        file.set( null );
+        tracking.set( false );
     }
 
 
     /**
      * Called once per second, whether we're tracking or not.
      */
-    private void temperaturesRead() {
-
-        LOGGER.log( Level.FINEST, () -> "Temperatures Read" );
+    private void temperaturesReadImpl() {
 
         // if we're not tracking, just leave...
         if( !tracking.get() )
             return;
 
-        // if our records array is full, then this recording is taking too long; abandon it...
-        if( records.get().size() == MAX_TEMPERATURE_RECORDS ) {
-            LOGGER.log( Level.INFO, "Thermal tracker buffer is full; abandoning thermal tracking for this cycle" );
-            clear();
-            return;
-        }
+        LOGGER.log( Level.FINEST, () -> "Temperatures Read" );
 
-        // we ARE tracking, so let's see if we have valid temperatures...
-        InfoSource<Float> batterySource = shedSolar.batteryTemperature.getInfoSource();
-        InfoSource<Float> heaterSource = shedSolar.heaterTemperature.getInfoSource();
-        if(
-                !batterySource.isInfoAvailable()
-                || batterySource.getInfoTimestamp().isBefore( Instant.now( Clock.systemUTC() ).minusSeconds( 1 ) )
-                || !heaterSource.isInfoAvailable()
-                || heaterSource.getInfoTimestamp().isBefore( Instant.now( Clock.systemUTC() ).minusSeconds( 1 ) ) ) {
-
-            LOGGER.log( Level.WARNING, "Problem reading temperatures; thermal tracking abandoned" );
-            LOGGER.finest( () -> "Battery available: " + batterySource.isInfoAvailable() );
-            LOGGER.finest( () -> "Battery too old: " + batterySource.getInfoTimestamp().isBefore( Instant.now( Clock.systemUTC() ).minusSeconds( 1 ) ) );
-            LOGGER.finest( () -> "Heater available: " + heaterSource.isInfoAvailable() );
-            LOGGER.finest( () -> "Heater too old: " + heaterSource.getInfoTimestamp().isBefore( Instant.now( Clock.systemUTC() ).minusSeconds( 1 ) ) );
-            clear();
-            return;
-        }
-
-        // on the other hand, if we can't get ambient or outside temperatures, we'll just make them a special value (-100) and record anyway...
-        InfoSource<Float> ambientSource = shedSolar.ambientTemperature.getInfoSource();
-        InfoSource<Float> outsideSource = shedSolar.outsideTemperature.getInfoSource();
-        float outside = (outsideSource.isInfoAvailable() ? outsideSource.getInfo() : -100.0f );
-        float ambient = (ambientSource.isInfoAvailable() ? ambientSource.getInfo() : -100.0f );
-
-        // we have valid temperatures, so record them...
-        LOGGER.log( Level.FINEST, () -> "Recording temperatures" );
-        records.get().add( new TrackingRecord( batterySource.getInfo(), heaterSource.getInfo(), outside, ambient ) );
+        // we ARE tracking, so let's get our temps and write the record...
+        String temps =
+                getTemp( shedSolar.batteryTemperature.getInfoSource() ) + ","
+                + getTemp( shedSolar.heaterTemperature.getInfoSource() ) + ","
+                + getTemp( shedSolar.ambientTemperature.getInfoSource() ) + ","
+                + getTemp( shedSolar.outsideTemperature.getInfoSource() );
+        writeRecord( Instant.now( Clock.systemUTC() ), RecordType.TEMP, temps );
     }
 
 
@@ -220,170 +267,45 @@ public class ThermalTracker {
 
         LOGGER.log( Level.FINEST, () -> "Finalizing recording" );
 
-        // do the file recording in another thread...
-        TrackingCycle cycle = new TrackingCycle( records.get(), startTime.get(), stopTime.get(), ambientTemp.get(), outsideTemp.get() );
-        shedSolar.executor.submit( cycle::record );
+        // close our writer...
+        try {
+            writer.get().close();
+        }
+        catch( IOException _e ) {
+            LOGGER.log( Level.SEVERE, "Unexpected problem closing thermal tracking file: " + _e.getMessage(), _e );
+        }
 
-        // create a new list for records, and clear...
-        records.set( new ArrayList<>( MAX_TEMPERATURE_RECORDS ) );
-        clear();
-    }
-
-
-    /**
-     * Clear all our tracking data, and set tracking to {@code false} (not tracking).
-     */
-    private void clear() {
-
-        // stop tracking...
+        // get things ready for the next cycle...
+        writer.set( null );
+        file.set( null );
         tracking.set( false );
 
-        // clear our recorded data...
-        records.get().clear();
-        startTime.set( null );
-        stopTime.set( null );
+        /* Now we make sure we're not accumulating too many records */
 
-    }
+        // get a list of the files in our recordings directory...
+        File recordings = new File( RECORDINGS_DIRECTORY );
+        File[] filesFound = recordings.listFiles();
 
-
-    private final static DateTimeFormatter fileNameFormatter    = DateTimeFormatter.ofPattern( "yyyy-MM-dd_HH-mm-ss'.rec'" );
-
-
-    /**
-     * Contains the data from one tracking cycle, and records it into a file.  It also deletes older files.
-     */
-    private static class TrackingCycle {
-
-        private final List<TrackingRecord> records;
-        private final Instant              startTime;
-        private final Instant              stopTime;
-        private final float                ambientTemperature;
-        private final float                outsideTemperature;
-
-
-        private TrackingCycle( final List<TrackingRecord> _records, final Instant _startTime, final Instant _stopTime,
-                              final float _ambientTemperature, final float _outsideTemperature ) {
-
-            records = _records;
-            startTime = _startTime;
-            stopTime = _stopTime;
-            ambientTemperature = _ambientTemperature;
-            outsideTemperature = _outsideTemperature;
+        // make sure we actually got a directory...
+        if( filesFound == null ) {
+            LOGGER.log( Level.SEVERE, "Recordings directory is not a directory" );
+            return;
         }
 
+        // get the files into a list and sort them so the oldest are first on the list...
+        List<File> files = Arrays.asList( filesFound );
+        files.sort( Comparator.comparing( File::getName ) );
 
-        /**
-         * Creates and writes this tracking cycle to a file in the recordings directory, and deletes the oldest of any files that exceed the maximum
-         * number of files.  The file format is very simple: the first line is the header, and the subsequent lines are temperature records.  The file
-         * is text, encoded in UTF-8.  The header line has the following comma-separated fields (in order): start time, heater off time, ambient
-         * temperature, outside temperature.  The temperature records have the following comma-separated fields (in order): timestamp, battery
-         * temperature, heater temperature.  The times are all in YYYY/MM/DD hh:mm:ss format (for example, "2021/03/03 14:54:22").  The temperatures
-         * are all in °C with two decimals (for example, 3.88).
-         */
-        private void record() {
-
-            try {
-
-                LOGGER.log( Level.FINEST, () -> "Recording" );
-
-                /* First we write out our new file */
-
-                // make our file name...
-                ZonedDateTime localStartTime = ZonedDateTime.ofInstant( startTime, ZoneId.of( "America/Denver" ) );
-                String fileName = fileNameFormatter.format( localStartTime );
-
-                // open the file for writing...
-                File recording = new File( RECORDINGS_DIRECTORY + "/" + fileName );
-                LOGGER.log( Level.FINEST, () -> "File: " + recording.getAbsolutePath() );
-                if( recording.createNewFile() ) {
-
-                    // get the writer we'll use to output our text...
-                    BufferedWriter writer = new BufferedWriter( new OutputStreamWriter( new FileOutputStream( recording ), StandardCharsets.UTF_8 ) );
-
-                    // write out the header...
-                    ZonedDateTime localStopTime = ZonedDateTime.ofInstant( stopTime, ZoneId.of( "America/Denver" ) );
-                    writer.write( timestampFormatter.format( localStartTime ) + "," + timestampFormatter.format( localStopTime ) + ","
-                            + temperatureFormatter.format( ambientTemperature ) + "," + temperatureFormatter.format( outsideTemperature ) );
-                    writer.newLine();
-
-                    // write out all our temperature records...
-                    for( TrackingRecord record : records ) {
-                        ZonedDateTime localTimestamp = ZonedDateTime.ofInstant( record.timestamp, ZoneId.of( "America/Denver" ) );
-                        writer.write( timestampFormatter.format( localTimestamp ) + ","
-                                + temperatureFormatter.format( record.batteryTemp ) + "," + temperatureFormatter.format( record.heaterTemp ) + ","
-                                + temperatureFormatter.format( record.ambientTemp ) + "," + temperatureFormatter.format( record.outsideTemp ) );
-                        writer.newLine();
-                    }
-
-                    // we're done writing, so close our writer...
-                    writer.flush();
-                    writer.close();
-
-                    LOGGER.info( () -> "Recorded thermal tracking in " + fileName );
-                }
-                else {
-                    LOGGER.log( Level.SEVERE, "Could not create cycle tracking record" );
-                }
-
-                /* Now we make sure we're not accumulating too many records */
-
-                // get a list of the files in our recordings directory...
-                File recordings = new File( RECORDINGS_DIRECTORY );
-                File[] filesFound = recordings.listFiles();
-
-                // make sure we actually got a directory...
-                if( filesFound == null ) {
-                    LOGGER.log( Level.SEVERE, "Recordings directory is not a directory" );
-                    return;
-                }
-
-                // get the files into a list and sort them so the oldest are first on the list...
-                List<File> files = Arrays.asList( filesFound );
-                files.sort( Comparator.comparing( File::getName ) );
-
-                // now delete files as needed to get the number of files down to the maximum allowed...
-                while( files.size() > MAX_RECORDINGS ) {
-                    if( files.get( 0 ).delete() )
-                        files.remove( 0 );
-                    else {
-                        LOGGER.log( Level.SEVERE, "Could not delete " + files.get( 0 ).getName() );
-                        break;
-                    }
-                }
-
-                LOGGER.info( () -> "Number of thermal tracking files: " + files.size() );
-            }
-            catch( Exception _e ) {
-                LOGGER.log( Level.SEVERE, "Problem while recording thermal cycle", _e );
+        // now delete files as needed to get the number of files down to the maximum allowed...
+        while( files.size() > MAX_RECORDINGS ) {
+            if( files.get( 0 ).delete() )
+                files.remove( 0 );
+            else {
+                LOGGER.log( Level.SEVERE, "Could not delete " + files.get( 0 ).getName() );
+                break;
             }
         }
-    }
 
-
-    /**
-     * Contains the data from one tracking record (one per second).
-     */
-    private static class TrackingRecord {
-
-        private final float   batteryTemp;
-        private final float   heaterTemp;
-        private final float   ambientTemp;
-        private final float   outsideTemp;
-        private final Instant timestamp;
-
-
-        /**
-         * Creates a new instance of this class with the given temperatures.
-         *
-         * @param _batteryTemp The battery temperature in °C.
-         * @param _heaterTemp The heater output temperature in °C.
-         */
-        private TrackingRecord( final float _batteryTemp, final float _heaterTemp, final float _outsideTemp, final float _ambientTemp ) {
-            batteryTemp = _batteryTemp;
-            heaterTemp  = _heaterTemp;
-            ambientTemp = _ambientTemp;
-            outsideTemp = _outsideTemp;
-            timestamp   = Instant.now( Clock.systemUTC() );
-        }
+        LOGGER.info( () -> "Number of thermal tracking files: " + files.size() );
     }
 }
