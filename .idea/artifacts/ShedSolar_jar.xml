@@ -9,6 +9,7 @@
       <element id="extracted-dir" path="$PROJECT_DIR$/lib/pi4j-device.jar" path-in-jar="/" />
       <element id="extracted-dir" path="$PROJECT_DIR$/lib/pi4j-gpio-extension.jar" path-in-jar="/" />
       <element id="extracted-dir" path="$PROJECT_DIR$/lib/commons-suncalc-3.4.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/lib/jetty-all-9.4.38.v20210224-uber.jar" path-in-jar="/" />
     </root>
   </artifact>
 </component>

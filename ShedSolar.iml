@@ -11,5 +11,6 @@
     <orderEntry type="library" name="commons-suncalc-3.4" level="project" />
     <orderEntry type="library" name="MOP" level="project" />
     <orderEntry type="library" name="mysql-connector-java-8.0.12" level="project" />
+    <orderEntry type="library" name="jetty-all-9.4.38.v20210224-uber" level="project" />
   </component>
 </module>

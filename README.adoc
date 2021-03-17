@@ -146,6 +146,14 @@ The file format is a simple text file with comma-separated values, one record pe
 * Ambient temperature
 * Outside temperature
 
+=== WebServer
+This just provides a very simple status page on port 80.  Actually, the web server is running on port 8217 and `iptables` has a rule to redirect port 80 to 8217.  The commands used to set the redirect:
+....
+sudo apt-get install iptables-persistent
+sudo iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 80 -j REDIRECT --to-port 8217
+sudo bash -c 'iptables-save > /etc/iptables/rules.v4'
+....
+The first command (of course!) is just installing the `iptables-persistent` application.
 
 
 == Some implementation notes…
