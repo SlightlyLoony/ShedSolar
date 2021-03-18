@@ -36,6 +36,7 @@ public class ThermalTracker {
     private final AtomicBoolean                   tracking;     // true if we're currently tracking (IOW, we're in a heater cycle)...
     private final AtomicReference<BufferedWriter> writer;       // writer for the tracking file...
     private final AtomicReference<File>           file;         // the file we're writing to (just in case we need to delete it)...
+    private final AtomicReference<Instant>        started;      // the time we started a recording cycle...
 
 
     /**
@@ -47,6 +48,7 @@ public class ThermalTracker {
         tracking    = new AtomicBoolean( false );
         writer      = new AtomicReference<>( null );
         file        = new AtomicReference<>( null );
+        started     = new AtomicReference<>( null );
 
         // subscribe to the haps we care about...
         shedSolar.haps.subscribe( NORMAL_HEATER_ON,       this::heaterOn      );
@@ -67,16 +69,31 @@ public class ThermalTracker {
 
 
     private void heaterOff() {
+
+        // if we're not tracking, just leave...
+        if( !tracking.get() )
+            return;
+
         shedSolar.executor.submit( this::heaterOffImpl );
     }
 
 
     private void heaterNoStart() {
+
+        // if we're not tracking, just leave...
+        if( !tracking.get() )
+            return;
+
         shedSolar.executor.submit( this::heaterNoStartImpl );
     }
 
 
     private void temperaturesRead() {
+
+        // if we're not tracking, just leave...
+        if( !tracking.get() )
+            return;
+
         shedSolar.executor.submit( this::temperaturesReadImpl );
     }
 
@@ -110,10 +127,11 @@ public class ThermalTracker {
             writer.set( new BufferedWriter( new OutputStreamWriter( new FileOutputStream( file.get() ), StandardCharsets.UTF_8 ) ) );
 
             // write out the "heater on" record...
-            writeRecord( startTime, RecordType.ON, null );
+            writeRecord(RecordType.ON, startTime, null );
 
             // indicate we are tracking...
             tracking.set( true );
+            started.set( Instant.now( Clock.systemUTC() ) );
 
         } catch( IOException _e ) {
             handleFileError( _e );
@@ -142,13 +160,15 @@ public class ThermalTracker {
      * Writes a single record out to the recording file, with the given timestamp, type, and optional fields.  The fields must have commas
      * between them, but no leading comma.
      *
-     * @param _timestamp The timestamp for this record.
      * @param _type The type of this record.
+     * @param _timestamp The timestamp for this record.
      * @param _fields The (optional) fields for this record.
      */
-    private void writeRecord( final Instant _timestamp, final RecordType _type, final String _fields ) {
+    private void writeRecord( final RecordType _type, final Instant _timestamp, final String _fields ) {
 
         BufferedWriter bw = writer.get();
+
+        LOGGER.log( Level.FINEST, "Write record: " + _type.toString() );
 
         try {
             // write out the record type...
@@ -208,7 +228,7 @@ public class ThermalTracker {
      */
     private void heaterOffImpl() {
         LOGGER.log( Level.FINEST, () -> "Heater off" );
-        writeRecord( Instant.now( Clock.systemUTC() ), RecordType.OFF, null );
+        writeRecord(RecordType.OFF, Instant.now( Clock.systemUTC() ), null );
     }
 
 
@@ -244,11 +264,23 @@ public class ThermalTracker {
      */
     private void temperaturesReadImpl() {
 
-        // if we're not tracking, just leave...
-        if( !tracking.get() )
-            return;
-
         LOGGER.log( Level.FINEST, () -> "Temperatures Read" );
+
+        // check to see if we've exceeded our three day limit...
+        if( Duration.between( started.get(), Instant.now( Clock.systemUTC() ) ).compareTo( Duration.ofDays( 3 ) ) > 0 ) {
+
+            // shut our tracking down...
+
+            // make sure we've closed our writer and turned tracking off...
+            try {
+                writer.get().close();
+            } catch (IOException e) {
+                // naught to do here, so just ignore the exception...
+            }
+            writer.set( null );
+            tracking.set( false );
+            return;
+        }
 
         // we ARE tracking, so let's get our temps and write the record...
         String temps =
@@ -256,7 +288,7 @@ public class ThermalTracker {
                 + getTemp( shedSolar.heaterTemperature.getInfoSource() ) + ","
                 + getTemp( shedSolar.ambientTemperature.getInfoSource() ) + ","
                 + getTemp( shedSolar.outsideTemperature.getInfoSource() );
-        writeRecord( Instant.now( Clock.systemUTC() ), RecordType.TEMP, temps );
+        writeRecord( RecordType.TEMP, Instant.now( Clock.systemUTC() ), temps );
     }
 
 
