@@ -11,7 +11,6 @@ scp /Users/tom/IdeaProjects/ShedSolar/dbpassword.js shedsolar:/apps/shedsolar
 scp /Users/tom/IdeaProjects/ShedSolar/key.js shedsolar:/apps/shedsolar
 scp /Users/tom/IdeaProjects/ShedSolar/secret.js shedsolar:/apps/shedsolar
 scp /Users/tom/IdeaProjects/ShedSolar/ShedSolar.service shedsolar:/apps/shedsolar
-scp /Users/tom/IdeaProjects/ShedSolar/web/* shedsolar:/apps/shedsolar
 
 # execute commands on the ShedSolar server
 # get to the app directory
