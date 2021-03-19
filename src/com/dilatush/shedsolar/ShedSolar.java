@@ -78,6 +78,7 @@ public class ShedSolar {
     private EventSender              eventSender;
     private Monitor                  monitor;
     private GpioController           gpio;
+    private WebServer                webServer;
 
 
     /**
@@ -237,6 +238,9 @@ public class ShedSolar {
 
             // set up our monitor...
             monitor = new Monitor( po );
+
+            // start up our web site...
+            webServer = new WebServer();
         }
 
         // if we get ANY exception during the app startup, we consider it to be fatal...

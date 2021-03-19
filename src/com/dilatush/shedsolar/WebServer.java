@@ -21,18 +21,24 @@ public class WebServer {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
+    private final static int PORT = 8217;
+
+
+    /**
+     * Create a new instance of this class.
+     */
+    public WebServer() {
+        getServer();
+    }
+
     /**
      * Initialize the Jetty web server for our private instance.
      *
-     * @param _port
-     *      the port to use for the web server.
-     * @return
-     *      the Jetty server instance.
      */
-    private Server getServer( final int _port ) {
+    private void getServer() {
 
         // start the Jetty server...
-        Server server = new Server( _port );
+        Server server = new Server( PORT );
 
         ResourceHandler rh1 = new ResourceHandler();
         rh1.setDirectoriesListed( false );
@@ -54,9 +60,7 @@ public class WebServer {
 
             // this is catastrophic - just log and leave with a null...
             LOGGER.log( SEVERE, "Problem prevents web server startup", _e );
-            return null;
         }
-        return server;
     }
 
 }

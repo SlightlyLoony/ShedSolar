@@ -270,6 +270,7 @@ public class ThermalTracker {
         if( Duration.between( started.get(), Instant.now( Clock.systemUTC() ) ).compareTo( Duration.ofDays( 3 ) ) > 0 ) {
 
             // shut our tracking down...
+            LOGGER.finest( "Shutting thermal tracking down because we hit the 3 day limit" );
 
             // make sure we've closed our writer and turned tracking off...
             try {
