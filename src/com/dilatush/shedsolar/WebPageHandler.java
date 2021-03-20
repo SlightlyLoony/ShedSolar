@@ -12,7 +12,11 @@ import java.io.IOException;
 import java.text.DecimalFormat;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static com.dilatush.shedsolar.Events.*;
 
 /**
  * Provides a simple handler for the one web page provided by this server.
@@ -20,6 +24,52 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author Tom Dilatush  tom@dilatush.com
  */
 public class WebPageHandler extends AbstractHandler implements Handler {
+
+    private final ShedSolar ss;   // a shortcut alias...
+
+    private Instant lastHeaterOn;
+    private Instant lastHeaterOff;
+    private boolean heaterOn;
+    private List<Instant> heaterOns;  // heater on times for past week...
+
+    public WebPageHandler() {
+
+        // initialize some things...
+        ss = ShedSolar.instance;
+        heaterOns = new ArrayList<>();
+
+        // subscribe to things we need to know about...
+        ss.haps.subscribe( HEATER_ON,       this::onHeaterOn      );
+        ss.haps.subscribe( HEATER_OFF,      this::onHeaterOff     );
+
+        // schedule things we need to do periodically...
+        ss.scheduledExecutor.scheduleAtFixedRate( this::cleanup, Duration.ofMinutes( 1 ), Duration.ofMinutes( 1 ) );
+    }
+
+
+    private void cleanup() {
+
+        // the oldest heater on time we want to keep...
+        Instant oldest = Instant.now( Clock.systemUTC() ).minus( Duration.ofDays( 7 ) );
+
+        // delete any heater on times that are too old...
+        while( (heaterOns.size() > 0) && (heaterOns.get( 0 ).isBefore( oldest )) ) {
+            heaterOns.remove( 0 );
+        }
+    }
+
+
+    private void onHeaterOn() {
+        lastHeaterOn = Instant.now( Clock.systemUTC() );
+        heaterOns.add( lastHeaterOn );
+        heaterOn = true;
+    }
+
+
+    private void onHeaterOff() {
+        lastHeaterOff = Instant.now( Clock.systemUTC() );
+        heaterOn = false;
+    }
 
 
     @Override
@@ -30,29 +80,38 @@ public class WebPageHandler extends AbstractHandler implements Handler {
         if( !"/index.html".equalsIgnoreCase(  _request.getOriginalURI() ) && !"/".equals( _request.getOriginalURI() ) )
             return;
 
-        // test data...
-        InfoSource<Float> bat = new InfoSource<>( 16.498927f );
-        InfoSource<Float> htr = new InfoSource<>( 31.444f );
-        InfoSource<Float> amb = new InfoSource<>( 17.6f );
-        InfoSource<Float> out = new InfoSource<>( 15f );
+        // get our data...
+        InfoSource<Float> bat = ss.batteryTemperature.getInfoSource();
+        InfoSource<Float> htr = ss.heaterTemperature.getInfoSource();
+        InfoSource<Float> amb = ss.ambientTemperature.getInfoSource();
+        InfoSource<Float> out = ss.outsideTemperature.getInfoSource();
 
         // fill in the data on our page...
         AtomicReference<String> page = new AtomicReference<>( PAGE );
-        fillDateTime(    page, "##now##", Instant.now( Clock.systemUTC() ) );
-        fillTemperature( page, "##bat_temp##",         bat );
-        fillAge(         page, "##bat_temp_time##",    bat );
-        fillTemperature( page, "##heater_temp##",      htr );
-        fillAge(         page, "##heater_temp_time##", htr );
-        fillTemperature( page, "##amb_temp##",         amb );
-        fillAge(         page, "##amb_temp_time##",    amb );
-        fillTemperature( page, "##out_temp##",         out );
-        fillAge(         page, "##out_temp_time##",    out );
+        fillDateTime(    page, "##now##",              Instant.now( Clock.systemUTC() ) );
+        fillHeaterState( page, "##heater_state##",     heaterOn                         );
+        // TODO: heater cycles...
+        fillTemperature( page, "##bat_temp##",         bat                              );
+        fillAge(         page, "##bat_temp_time##",    bat                              );
+        fillTemperature( page, "##heater_temp##",      htr                              );
+        fillAge(         page, "##heater_temp_time##", htr                              );
+        fillTemperature( page, "##amb_temp##",         amb                              );
+        fillAge(         page, "##amb_temp_time##",    amb                              );
+        fillTemperature( page, "##out_temp##",         out                              );
+        fillAge(         page, "##out_temp_time##",    out                              );
 
         // now send our page...
         _httpServletResponse.setContentType( "text/html" );
         _httpServletResponse.setStatus( HttpServletResponse.SC_OK );
         _httpServletResponse.getWriter().println( page.get() );
         _request.setHandled( true );
+    }
+
+
+    private void fillHeaterState( final AtomicReference<String> _page, final String _pattern, final boolean _state ) {
+        _page.set( _page.get().replace( _pattern, _state
+                ? "<span style='color: #ff6600;'>ON</span>"
+                : "<span style='color: #0000ff;'>OFF</span>" ) );
     }
 
 
@@ -125,9 +184,14 @@ public class WebPageHandler extends AbstractHandler implements Handler {
                     "</thead>" +
                     "<tbody>" +
                         "<tr>" +
-                            "<td><span>Heater</span></td>" +    // TODO: working on heater on...
-                            "<td><span>##bat_temp##</span></td>" +
-                            "<td><span>##bat_temp_time##</span></td>" +
+                            "<td><span>Heater State</span></td>" +
+                            "<td><span>##heater_state##</span></td>" +
+                            "<td><span>Current heater state...</span></td>" +
+                        "</tr>" +
+                        "<tr>" +
+                            "<td><span>Heater Cycles</span></td>" +
+                            "<td><span>##heater_cycle##</span></td>" +
+                            "<td><span>There were ##heater_cycles## heater cycles in the past week.</span></td>" +
                         "</tr>" +
                         "<tr>" +
                             "<td><span>Battery Temperature</span></td>" +

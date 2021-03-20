@@ -65,13 +65,4 @@ public class WebServer {
             LOGGER.log( SEVERE, "Problem prevents web server startup", _e );
         }
     }
-
-    public static void main( final String[] _args ) throws InterruptedException {
-
-        WebServer webServer = new WebServer();
-
-        while( true ) {
-            sleep( 1000 );
-        }
-    }
 }
