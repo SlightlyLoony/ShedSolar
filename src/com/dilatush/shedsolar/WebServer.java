@@ -11,7 +11,6 @@ import org.eclipse.jetty.util.thread.QueuedThreadPool;
 
 import java.util.logging.Logger;
 
-import static java.lang.Thread.sleep;
 import static java.util.logging.Level.SEVERE;
 
 /**
@@ -23,7 +22,7 @@ public class WebServer {
 
     private static final Logger LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getCanonicalName() );
 
-    private final static int PORT = 8217;
+    private final static int PORT = 8218;
 
 
     /**
@@ -43,7 +42,7 @@ public class WebServer {
         QueuedThreadPool qtp = new QueuedThreadPool( 5, 4 );
         Server server = new Server( qtp );
         ServerConnector serverConnector = new ServerConnector( server );
-        serverConnector.setHost( "localhost" );
+        serverConnector.setHost( null );
         serverConnector.setPort( PORT );
         serverConnector.setIdleTimeout( 30000 );
         server.addConnector( serverConnector );
@@ -58,6 +57,7 @@ public class WebServer {
 
         try {
             server.start();
+            LOGGER.info( "Web server is running on port " + PORT );
         }
         catch( Exception _e ) {
 

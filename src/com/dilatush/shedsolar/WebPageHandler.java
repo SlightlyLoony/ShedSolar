@@ -5,7 +5,6 @@ import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -16,7 +15,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static com.dilatush.shedsolar.Events.*;
+import static com.dilatush.shedsolar.Events.HEATER_OFF;
+import static com.dilatush.shedsolar.Events.HEATER_ON;
 
 /**
  * Provides a simple handler for the one web page provided by this server.
@@ -30,7 +30,7 @@ public class WebPageHandler extends AbstractHandler implements Handler {
     private Instant lastHeaterOn;
     private Instant lastHeaterOff;
     private boolean heaterOn;
-    private List<Instant> heaterOns;  // heater on times for past week...
+    private final List<Instant> heaterOns;  // heater on times for past week...
 
     public WebPageHandler() {
 
@@ -74,7 +74,7 @@ public class WebPageHandler extends AbstractHandler implements Handler {
 
     @Override
     public void handle( final String _s, final Request _request, final HttpServletRequest _httpServletRequest,
-                        final HttpServletResponse _httpServletResponse ) throws IOException, ServletException {
+                        final HttpServletResponse _httpServletResponse ) throws IOException {
 
         // if this isn't a request for our one-and-only page, then just leave...
         if( !"/index.html".equalsIgnoreCase(  _request.getOriginalURI() ) && !"/".equals( _request.getOriginalURI() ) )
@@ -88,17 +88,32 @@ public class WebPageHandler extends AbstractHandler implements Handler {
 
         // fill in the data on our page...
         AtomicReference<String> page = new AtomicReference<>( PAGE );
-        fillDateTime(    page, "##now##",              Instant.now( Clock.systemUTC() ) );
-        fillHeaterState( page, "##heater_state##",     heaterOn                         );
-        // TODO: heater cycles...
-        fillTemperature( page, "##bat_temp##",         bat                              );
-        fillAge(         page, "##bat_temp_time##",    bat                              );
-        fillTemperature( page, "##heater_temp##",      htr                              );
-        fillAge(         page, "##heater_temp_time##", htr                              );
-        fillTemperature( page, "##amb_temp##",         amb                              );
-        fillAge(         page, "##amb_temp_time##",    amb                              );
-        fillTemperature( page, "##out_temp##",         out                              );
-        fillAge(         page, "##out_temp_time##",    out                              );
+        fillDateTime(     page, "##now##",              Instant.now( Clock.systemUTC() ) );
+        fillHeaterState(  page, "##heater_state##",     heaterOn                         );
+        fillHeaterCycle(  page, "##heater_cycle##",     lastHeaterOn, lastHeaterOff      );
+        fillHeaterCycles( page, "##heater_cycles##",    heaterOns.size()                 );
+        fillTemperature(  page, "##bat_temp##",         bat                              );
+        fillAge(          page, "##bat_temp_time##",    bat                              );
+        fillTemperature(  page, "##heater_temp##",      htr                              );
+        fillAge(          page, "##heater_temp_time##", htr                              );
+        fillTemperature(  page, "##amb_temp##",         amb                              );
+        fillAge(          page, "##amb_temp_time##",    amb                              );
+        fillTemperature(  page, "##out_temp##",         out                              );
+        fillAge(          page, "##out_temp_time##",    out                              );
+
+        // TODO: SOC
+        // TODO: panel output power (really, CC output power/battery input power)
+        // TODO: inverter output power
+        // TODO: battery output power
+        // TODO: battery voltage
+        // TODO: irradiance
+        // TODO: light detector mode
+        // TODO: heater controller (normal, battery only, etc.)
+        // TODO: heater controller state
+        // TODO:
+        // TODO:
+        // TODO:
+        // TODO:
 
         // now send our page...
         _httpServletResponse.setContentType( "text/html" );
@@ -108,10 +123,36 @@ public class WebPageHandler extends AbstractHandler implements Handler {
     }
 
 
+    private void fillHeaterCycle( final AtomicReference<String> _page, final String _pattern,
+                                  final Instant _start, final Instant _stop ) {
+
+        // if we have no start time, then we have a default answer...
+        String result = "(not yet)";
+        if( _start != null ) {
+
+            // if the heater is currently on, ending time is right now...
+            Instant stop = heaterOn ? Instant.now( Clock.systemUTC() ) : _stop;
+
+            // calculate how long the heater was on (or has been on)...
+            long onTime = Duration.between( _start, stop ).getSeconds();
+
+            // make our pretty answer...
+            result = nowFormatter.format( _start ) + " for " + onTime + " seconds";
+        }
+
+        _page.set( _page.get().replace( _pattern, result ) );
+    }
+
+
+    private void fillHeaterCycles( final AtomicReference<String> _page, final String _pattern, final int _cycles ) {
+        _page.set( _page.get().replace( _pattern, "" + _cycles ) );
+    }
+
+
     private void fillHeaterState( final AtomicReference<String> _page, final String _pattern, final boolean _state ) {
         _page.set( _page.get().replace( _pattern, _state
-                ? "<span style='color: #ff6600;'>ON</span>"
-                : "<span style='color: #0000ff;'>OFF</span>" ) );
+                ? "<span style='margin: 0; color: #ff6600;'>ON</span>"
+                : "<span style='margin: 0; color: #0000ff;'>OFF</span>" ) );
     }
 
 
@@ -178,7 +219,7 @@ public class WebPageHandler extends AbstractHandler implements Handler {
                     "<thead>" +
                         "<tr>" +
                             "<th><span>Item</span></th>" +
-                            "<th><span>State</span></th>" +
+                            "<th><span>Status</span></th>" +
                             "<th><span>Info</span></th>" +
                         "</tr>" +
                     "</thead>" +
@@ -189,7 +230,7 @@ public class WebPageHandler extends AbstractHandler implements Handler {
                             "<td><span>Current heater state...</span></td>" +
                         "</tr>" +
                         "<tr>" +
-                            "<td><span>Heater Cycles</span></td>" +
+                            "<td><span>Last Heater Cycle</span></td>" +
                             "<td><span>##heater_cycle##</span></td>" +
                             "<td><span>There were ##heater_cycles## heater cycles in the past week.</span></td>" +
                         "</tr>" +

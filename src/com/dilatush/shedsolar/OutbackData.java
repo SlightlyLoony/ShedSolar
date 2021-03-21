@@ -54,6 +54,8 @@ public class OutbackData {
         double tInverterVoltage1 = 0;
         double tInverterVoltage2 = 0;
 
+        // TODO: fix this with my improved understanding of the values in the JSON package...
+
         JSONObject devstatus = _outbackData.getJSONObject( "devstatus" );
         timestamp = Instant.ofEpochMilli( 1000 * devstatus.getLong( "Sys_Time" ) );
         JSONArray ports = devstatus.getJSONArray( "ports" );
