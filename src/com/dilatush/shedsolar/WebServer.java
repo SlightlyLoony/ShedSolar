@@ -5,6 +5,7 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.server.handler.DefaultHandler;
 import org.eclipse.jetty.server.handler.HandlerList;
+import org.eclipse.jetty.server.handler.ResourceHandler;
 import org.eclipse.jetty.server.session.DefaultSessionIdManager;
 import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
@@ -51,8 +52,12 @@ public class WebServer {
 
         Handler sessionHandler = new SessionHandler();
 
+        ResourceHandler resourceHandler = new ResourceHandler();
+        resourceHandler.setDirectoriesListed( false );
+        resourceHandler.setResourceBase("./web");
+
         HandlerList handlers = new HandlerList();
-        handlers.setHandlers( new Handler[] { sessionHandler, new WebPageHandler(), new DefaultHandler() });
+        handlers.setHandlers( new Handler[] { sessionHandler, new WebPageHandler(), resourceHandler, new DefaultHandler() });
         server.setHandler(handlers);
 
         try {
