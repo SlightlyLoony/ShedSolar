@@ -9,6 +9,8 @@ import com.dilatush.util.info.InfoSource;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Logger;
 
 import static com.dilatush.shedsolar.Events.*;
@@ -26,6 +28,8 @@ public class EventSender extends Actor {
 
     private static final float MIN_SAFE_BATTERY_TEMPERATURE = 5.0f;
 
+    private final Map<String,Instant> badReadTracking;
+
     // a short alias...
     private final ShedSolar ss = ShedSolar.instance;
 
@@ -37,6 +41,9 @@ public class EventSender extends Actor {
      */
     public EventSender( final PostOffice _po ) {
         super( _po, eventSenderName );
+
+        // some initialization...
+        badReadTracking = new HashMap<>();
 
         // subscribe to the haps we want to use...
         ss.haps.subscribe( HEATER_NO_START, this::heaterNoStart );
@@ -123,8 +130,36 @@ public class EventSender extends Actor {
 
 
     private void badRead( final Object _message ) {
-        String msg = (_message instanceof String) ? (String) _message : "Bad message";
-        sendEvent( "temperature.badRead", "temperature.badRead", 3, msg, msg );
+
+        // if we don't have a string, we've got a problem...
+        if( !(_message instanceof String) ) {
+            LOGGER.severe( "Got bad temperature read hap with no string message" );
+            return;
+        }
+
+        /* we go to some trouble to only send an event if we see the same problem repeatedly */
+
+        // get our message and key...
+        String msg = (String) _message;
+        int first = msg.indexOf( "raw " ) + 4;
+        int last = msg.indexOf( ", meaning" );
+        String key = msg.substring( 0, first ) + msg.substring( last );
+
+        // have we seen this exact message before?
+        if( badReadTracking.containsKey( key ) ) {
+
+            // if we saw it within 5 seconds, report it...
+            if( badReadTracking.get( key ).isAfter( Instant.now( Clock.systemUTC() ).minusSeconds( 5 ) ) ) {
+                sendEvent( "temperature.badRead", "temperature.badRead", 3, msg, msg );
+            }
+
+            // delete it so we don't send too many events...
+            badReadTracking.remove( key );
+        }
+
+        // no, so add it for tracking purposes...
+        else
+            badReadTracking.put( key, Instant.now( Clock.systemUTC() ) );
     }
 
 
