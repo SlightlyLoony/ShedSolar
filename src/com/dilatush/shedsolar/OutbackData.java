@@ -31,6 +31,10 @@ public class OutbackData {
     public final double  todayKwhOut;
     public final double  panelPower;
     public final double  inverterPower;
+    public final double  batteryChargeCurrent;
+    public final double  batteryDischargeCurrent;
+    public final double  batteryChargePower;
+    public final double  batteryDischargePower;
 
 
     /**
@@ -43,18 +47,17 @@ public class OutbackData {
 
         // some temporary variables to fill in, in the loop below...
         // we do this so that the compiler won't complain about final variables being assigned in the loop..
-        double tPanelVoltage     = 0;
-        double tBatteryVoltage   = 0;
-        double tStateOfCharge    = 0;
-        double tTodayKwhIn       = 0;
-        double tTodayKwhOut      = 0;
-        double tPanelCurrent     = 0;
+        double tPanelVoltage      = 0;
+        double tBatteryVoltage    = 0;
+        double tStateOfCharge     = 0;
+        double tTodayKwhIn        = 0;
+        double tTodayKwhOut       = 0;
         double tInverterCurrent1  = 0;
         double tInverterCurrent2  = 0;
-        double tInverterVoltage1 = 0;
-        double tInverterVoltage2 = 0;
-
-        // TODO: fix this with my improved understanding of the values in the JSON package...
+        double tInverterVoltage1  = 0;
+        double tInverterVoltage2  = 0;
+        double tBatteryChargeI    = 0;
+        double tBatteryDischargeI = 0;
 
         JSONObject devstatus = _outbackData.getJSONObject( "devstatus" );
         timestamp = Instant.ofEpochMilli( 1000 * devstatus.getLong( "Sys_Time" ) );
@@ -75,28 +78,33 @@ public class OutbackData {
                 // CC: charge controller...
                 case 9:
                     tPanelVoltage   = port.getDouble( "In_V" );
-                    tPanelCurrent   = port.getDouble( "In_I" );
                     break;
 
                 // FNDC: FLEXnet DC, DC system monitoring...
                 case 10:
-                    tBatteryVoltage = port.getDouble( "Batt_V" );
-                    tStateOfCharge  = port.getDouble( "SOC" );
-                    tTodayKwhIn     = port.getDouble( "In_kWh_today" );
-                    tTodayKwhOut    = port.getDouble( "Out_kWh_today" );
+                    tBatteryVoltage    = port.getDouble( "Batt_V" );
+                    tStateOfCharge     = port.getDouble( "SOC" );
+                    tTodayKwhIn        = port.getDouble( "In_kWh_today" );
+                    tTodayKwhOut       = port.getDouble( "Out_kWh_today" );
+                    tBatteryChargeI    = port.getDouble( "Shunt_C_I" );
+                    tBatteryDischargeI = port.getDouble( "Shunt_A_I" );
                     break;
             }
         }
 
-        panelVoltage    = tPanelVoltage;
-        batteryVoltage  = tBatteryVoltage;
-        stateOfCharge   = tStateOfCharge;
-        todayKwhIn      = tTodayKwhIn;
-        todayKwhOut     = tTodayKwhOut;
-        inverterCurrent = tInverterCurrent1 + tInverterCurrent2;  // this is actually giving me the total current at 120VAC; a bit weird...
-        inverterVoltage = tInverterVoltage1 + tInverterVoltage2;  // this darned well be 240VAC or thereabouts!
-        panelCurrent    = tPanelCurrent;
-        panelPower      = panelCurrent * panelVoltage;
+        panelVoltage            = tPanelVoltage;
+        batteryVoltage          = tBatteryVoltage;
+        stateOfCharge           = tStateOfCharge;
+        todayKwhIn              = tTodayKwhIn;
+        todayKwhOut             = tTodayKwhOut;
+        inverterCurrent         = tInverterCurrent1 + tInverterCurrent2;  // this is actually giving me the total current at 120VAC; a bit weird...
+        inverterVoltage         = tInverterVoltage1 + tInverterVoltage2;  // this darned well be 240VAC or thereabouts!
+        panelCurrent            = batteryVoltage * tBatteryChargeI / panelVoltage;  // inferred from charge current - adding generator may screw this...
+        panelPower              = panelCurrent * panelVoltage;
+        batteryChargeCurrent    = tBatteryChargeI;
+        batteryDischargeCurrent = -tBatteryDischargeI;   // inverted because shunt reads negative for discharge currents...
+        batteryChargePower      = batteryChargeCurrent * batteryVoltage;
+        batteryDischargePower   = batteryDischargeCurrent * batteryVoltage;
 
         // this is required because current could be MUCH different on each leg...
         inverterPower   = (tInverterCurrent1 * tInverterVoltage1) + (tInverterCurrent2 * tInverterVoltage2);

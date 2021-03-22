@@ -50,7 +50,7 @@ The MAX31855 chips are capable of detecting the common kinds of thermocouple fai
 |===
 
 === Outbacker
-The `Outbacker` provides information read periodically from the Outback charger/inverter, so long as the ShedSolar system can "talk" to it.  The Outback charger/inverter has a simple JSON API at `<IP address>/Dev_status.cgi?&Port=0`.  Outbacker reads this URL by default once per minute, decodes and collects the information ShedSolar is interested in, and publishes it as an `OutbackData` structure in an `InfoView` at `public final outback`.
+The `Outbacker` provides information read periodically from the Outback charger/inverter, so long as the ShedSolar system can "talk" to it.  The Outback charger/inverter has a simple JSON API at `<IP address>/Dev_status.cgi?&Port=0`.  Outbacker reads this URL by default once per minute, decodes and collects the information ShedSolar is interested in, and publishes it as an `OutbackData` structure in an `InfoView` at `public final outback`.  See <<Outback Interface Information>> for more details on the information provided by the Outback Radian system.
 
 === ShedSolarActor
 The `ShedSolarActor` provides a MOP postoffice for ShedSolar.  It also subscribes to the per-minute weather report from our weather station to get the solar irradiance and outdoor temperature information that are useful to ShedSolar.  It publishes this information in `InfoView` instances `public final solarIrradiance` (reporting watts per square meter) and `outsideTemperature` (reporting °C, ±1%).
@@ -198,7 +198,7 @@ These are the codes displayed by the status indicator. There may be multiple sta
 
 [cols="<,<"]
 |===
-|Code |Status 
+|Code |Status
 
 |0 |Ok - no problems detected
 |1 |State of charge under 20%
@@ -213,6 +213,129 @@ These are the codes displayed by the status indicator. There may be multiple sta
 |100 |No data from weather station
 |101 |Database log not posted
 |===
+
+== Outback Interface Information
+
+Our Outback system includes a MATE3S system display and controller.  The MATE3S has an Ethernet interface that is exposed (in our case) as 10.4.5.2 (DNS name "outback-solar").  We know of three interesting URLs on port 80 of that interface:
+
+[cols="<,<"]
+|===
+|URL |Result
+
+|http://outback-solar/ |Website intended for human use; exposes the current status and configuration of the complete Outback system.  So far as I can determine, this is entirely read-only.
+|http://outback-solar/CONFIG.xml |An XML file containing the configuration of the complete Outback system.
+|http://outback-solar/Dev_status.cgi?Port=0 |JSON-encoded current status of the complete Outback system.
+|===
+
+Here are the interesting fields with non-obvious meanings contained in that JSON data, as reverse-engineered by me:
+
+[cols="<,<,<"]
+|===
+|Port |Field |Meaning
+
+|1 |`VAC_out_L1`, `VAC_out_L2` |AC voltages (nominally 120V RMS) from each half of the split-phase inverter.  The nominal 240VAC inverter output (to the load center) is the sum of these two voltages.
+|1 |`Inv_I_L1`, `Inv_I_L2` |AC currents from each half of the split-phase inverter.  Note that these currents are quite likely to be different, as each of the 120VAC phases has a different load.
+|9 |`In_V` |Current voltage of the photovoltaic panels.  Note that this will vary greatly depending on the load current (implying that the internal resistance of the panels is quite high).
+|10 |`Shunt_A_I` |DC current flowing __out__ of the battery.  This current (a) powers the Outback system itself, and (b) is the source of power for the inverter.
+|10 |`Shunt_C_I` |DC current flowing __into__ the battery.  This is the charging current, which comes from the photovoltaic panels or the generator.
+|10 |`Batt_V` |The DC voltage of the battery, to 0.1VDC.  The battery voltage appears in several places in the JSON data; this appears to be the most accurate.
+|===
+
+=== Sample JSON data
+
+Response to an HTTP request to `http://outback-solar/Dev_status.cgi?Port=0`
+
+....
+{
+  "devstatus": {
+    "Gateway_Type": "Mate3s",
+    "Sys_Time": 1616398044,
+    "Sys_Batt_V": 55.1,
+    "ports": [
+      {
+        "Port": 1,
+        "Dev": "GS",
+        "Type": "60Hz",
+        "Inv_I_L1": 0,
+        "Chg_I_L1": 0,
+        "Buy_I_L1": 0,
+        "Sell_I_L1": 0,
+        "VAC1_in_L1": 0,
+        "VAC2_in_L1": 0,
+        "VAC_out_L1": 122,
+        "Inv_I_L2": 0,
+        "Chg_I_L2": 0,
+        "Buy_I_L2": 0,
+        "Sell_I_L2": 0,
+        "VAC1_in_L2": 0,
+        "VAC2_in_L2": 0,
+        "VAC_out_L2": 123,
+        "AC_Input": "Gen",
+        "Batt_V": 54.8,
+        "AC_mode": "NO AC",
+        "INV_mode": "Inverting",
+        "Warn": [
+          "none"
+        ],
+        "Error": [
+          "none"
+        ],
+        "AUX": "disabled",
+        "RELAY": "disabled"
+      },
+      {
+        "Port": 9,
+        "Dev": "CC",
+        "Type": "Silent ",
+        "Out_I": 26.6,
+        "In_I": 6,
+        "Batt_V": 54.8,
+        "In_V": 242.1,
+        "Out_kWh": 1.5,
+        "Out_AH": 29,
+        "CC_mode": "  ",
+        "Error": [
+          "none"
+        ],
+        "Aux_mode": "Manual",
+        "AUX": "disabled"
+      },
+      {
+        "Port": 10,
+        "Dev": "FNDC",
+        "Enabled": [
+          "A",
+          "B",
+          "C"
+        ],
+        "Shunt_A_I": -1.2,
+        "Shunt_A_AH": -22,
+        "Shunt_A_kWh": -1.23,
+        "Shunt_B_I": 0.1,
+        "Shunt_B_AH": 1,
+        "Shunt_B_kWh": 0.11,
+        "Shunt_C_I": 26.4,
+        "Shunt_C_AH": 29,
+        "Shunt_C_kWh": 1.55,
+        "SOC": 100,
+        "Min_SOC": 96,
+        "Days_since_full": 0.5,
+        "CHG_parms_met": false,
+        "In_AH_today": 30,
+        "Out_AH_today": 14,
+        "In_kWh_today": 1.66,
+        "Out_kWh_today": 0.82,
+        "Net_CFC_AH": 7,
+        "Net_CFC_kWh": 0.4,
+        "Batt_V": 55.1,
+        "Batt_temp": "###",
+        "Aux_mode": "manual",
+        "AUX": "disabled"
+      }
+    ]
+  }
+}
+....
 
 == How is ShedSolar licensed?
 

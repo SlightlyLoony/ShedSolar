@@ -17,6 +17,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static com.dilatush.shedsolar.Events.HEATER_OFF;
 import static com.dilatush.shedsolar.Events.HEATER_ON;
+import static com.dilatush.shedsolar.LightDetector.Mode;
+import static com.dilatush.shedsolar.LightDetector.Mode.LIGHT;
 
 /**
  * Provides a simple handler for the one web page provided by this server.
@@ -81,10 +83,13 @@ public class WebPageHandler extends AbstractHandler implements Handler {
             return;
 
         // get our data...
-        InfoSource<Float> bat = ss.batteryTemperature.getInfoSource();
-        InfoSource<Float> htr = ss.heaterTemperature.getInfoSource();
-        InfoSource<Float> amb = ss.ambientTemperature.getInfoSource();
-        InfoSource<Float> out = ss.outsideTemperature.getInfoSource();
+        InfoSource<Float>       bat        = ss.batteryTemperature.getInfoSource();
+        InfoSource<Float>       htr        = ss.heaterTemperature.getInfoSource();
+        InfoSource<Float>       amb        = ss.ambientTemperature.getInfoSource();
+        InfoSource<Float>       out        = ss.outsideTemperature.getInfoSource();
+        InfoSource<Float>       irradiance = ss.solarIrradiance.getInfoSource();
+        InfoSource<OutbackData> outback    = ss.outback.getInfoSource();
+        InfoSource<Mode>        light      = ss.light.getInfoSource();
 
         // fill in the data on our page...
         AtomicReference<String> page = new AtomicReference<>( PAGE );
@@ -100,22 +105,67 @@ public class WebPageHandler extends AbstractHandler implements Handler {
         fillAge(          page, "##amb_temp_time##",    amb                              );
         fillTemperature(  page, "##out_temp##",         out                              );
         fillAge(          page, "##out_temp_time##",    out                              );
+        fillInfoInt(      page, "##solar_irr##",        irradiance                       );
+        fillLightMode(    page, "##light##",            light                            );
 
-        // TODO: SOC
-        // TODO: panel output power (really, CC output power/battery input power)
-        // TODO: inverter output power
-        // TODO: battery output power
-        // TODO: battery voltage
-        // TODO: irradiance
-        // TODO: light detector mode
-        // TODO: heater controller (normal, battery only, etc.)
-        // TODO: heater controller state
+        if( outback.isInfoAvailable() ) {
+            fillInt(    page, "##soc##",      (int) Math.round( outback.getInfo().stateOfCharge                                                ) );
+            fillInt(    page, "##bc_pow##",   (int) Math.round( outback.getInfo().batteryChargePower                                           ) );
+            fillInt(    page, "##bd_pow##",   (int) Math.round( outback.getInfo().batteryDischargePower                                        ) );
+            fillInt(    page, "##bn_pow##",   (int) Math.round( outback.getInfo().batteryChargePower - outback.getInfo().batteryDischargePower ) );
+            fillInt(    page, "##inv_pow##",  (int) Math.round( outback.getInfo().inverterPower                                                ) );
+            fillFloat1( page, "##bat_volts##", outback.getInfo().batteryVoltage                                                                  );
+        } else {
+            fillNotAvailable( page, "##soc##"       );
+            fillNotAvailable( page, "##bc_pow##"    );
+            fillNotAvailable( page, "##bd_pow##"    );
+            fillNotAvailable( page, "##bn_pow##"    );
+            fillNotAvailable( page, "##inv_pow##"   );
+            fillNotAvailable( page, "##bat_volts##" );
+        }
 
         // now send our page...
         _httpServletResponse.setContentType( "text/html" );
         _httpServletResponse.setStatus( HttpServletResponse.SC_OK );
         _httpServletResponse.getWriter().println( page.get() );
         _request.setHandled( true );
+    }
+
+
+    private void fillLightMode( final AtomicReference<String> _page, final String _pattern, final InfoSource<Mode> _light ) {
+        if( _light.isInfoAvailable() ) {
+            _page.set( _page.get().replace( _pattern, _light.getInfo() == LIGHT
+                    ? "<span style='margin: 0; color: #87ceeb;'>LIGHT</span>"
+                    : "<span style='margin: 0; color: #00008b;'>DARK</span>" ) );
+        }
+        else
+            _page.set( _page.get().replace( _pattern, "(not available)" ) );
+    }
+
+
+    private static final DecimalFormat float1Formatter = new DecimalFormat( "####0.0" );
+
+    private void fillFloat1( final AtomicReference<String> _page, final String _pattern, final double _data ) {
+        _page.set( _page.get().replace( _pattern, float1Formatter.format( _data ) ) );
+    }
+
+
+    private void fillInfoInt( final AtomicReference<String> _page, final String _pattern, final InfoSource<Float> _infoSource ) {
+        String target = "(not available)";
+        if( _infoSource.isInfoAvailable() ) {
+            target = Integer.toString( Math.round( _infoSource.getInfo() ) );
+        }
+        _page.set( _page.get().replace( _pattern, target ) );
+    }
+
+
+    private void fillNotAvailable( final AtomicReference<String> _page, final String _pattern ) {
+        _page.set( _page.get().replace( _pattern, "(not available)" ) );
+    }
+
+
+    private void fillInt( final AtomicReference<String> _page, final String _pattern, final int _data ) {
+        _page.set( _page.get().replace( _pattern, Integer.toString( _data ) ) );
     }
 
 
@@ -163,7 +213,7 @@ public class WebPageHandler extends AbstractHandler implements Handler {
 
     private void fillTemperature( final AtomicReference<String> _page, final String _pattern, final InfoSource<Float> _temp ) {
 
-        String target = "unavailable";
+        String target = "(not available)";
         if( _temp.isInfoAvailable() ) {
             String dc = temperatureFormatter.format( _temp.getInfo() );
             String df = temperatureFormatter.format( _temp.getInfo() * 9.0f / 5.0f + 32.0f );
@@ -228,12 +278,12 @@ public class WebPageHandler extends AbstractHandler implements Handler {
                         "<tr>" +
                             "<td><span>Heater State</span></td>" +
                             "<td><span>##heater_state##</span></td>" +
-                            "<td><span>Current heater state...</span></td>" +
+                            "<td><span>Current heater state</span></td>" +
                         "</tr>" +
                         "<tr>" +
                             "<td><span>Last Heater Cycle</span></td>" +
                             "<td><span>##heater_cycle##</span></td>" +
-                            "<td><span>There were ##heater_cycles## heater cycles in the past week.</span></td>" +
+                            "<td><span>There were ##heater_cycles## heater cycles in the past week</span></td>" +
                         "</tr>" +
                         "<tr>" +
                             "<td><span>Battery Temperature</span></td>" +
@@ -254,6 +304,56 @@ public class WebPageHandler extends AbstractHandler implements Handler {
                             "<td><span>Outside Temperature</span></td>" +
                             "<td><span>##out_temp##</span></td>" +
                             "<td><span>##out_temp_time##</span></td>" +
+                        "</tr>" +
+                        "<tr>" +
+                            "<td><span>State of Charge (SOC)</span></td>" +
+                            "<td><span>##soc##%</span></td>" +
+                            "<td><span>As reported by the Outback FNDC</span></td>" +
+                        "</tr>" +
+                        "<tr>" +
+                            "<td><span>Battery Charge Power</span></td>" +
+                            "<td><span>##bc_pow## watts</span></td>" +
+                            "<td><span>From photovoltaic panels</span></td>" +
+                        "</tr>" +
+                        "<tr>" +
+                            "<td><span>Battery Discharge Power</span></td>" +
+                            "<td><span>##bd_pow## watts</span></td>" +
+                            "<td><span>To inverter and Outback system</span></td>" +
+                        "</tr>" +
+                        "<tr>" +
+                            "<td><span>Battery Net Power</span></td>" +
+                            "<td><span>##bn_pow## watts</span></td>" +
+                            "<td><span>Net power into (+) or out of (-) battery</span></td>" +
+                        "</tr>" +
+                        "<tr>" +
+                            "<td><span>Inverter Output Power</span></td>" +
+                            "<td><span>##inv_pow## watts</span></td>" +
+                            "<td><span>To load center</span></td>" +
+                        "</tr>" +
+                        "<tr>" +
+                            "<td><span>Battery Voltage</span></td>" +
+                            "<td><span>##bat_volts## VDC</span></td>" +
+                            "<td><span>Measured by the Outback FNDC</span></td>" +
+                        "</tr>" +
+                        "<tr>" +
+                            "<td><span>Solar Irradiance</span></td>" +
+                            "<td><span>##solar_irr## watts/square meter</span></td>" +
+                            "<td><span>Measured by the weather station</span></td>" +
+                        "</tr>" +
+                        "<tr>" +
+                            "<td><span>Light Mode</span></td>" +
+                            "<td><span>##light##</span></td>" +
+                            "<td><span></span></td>" +
+                        "</tr>" +
+                        "<tr>" +
+                            "<td><span></span></td>" +
+                            "<td><span></span></td>" +
+                            "<td><span></span></td>" +
+                        "</tr>" +
+                        "<tr>" +
+                            "<td><span></span></td>" +
+                            "<td><span></span></td>" +
+                            "<td><span></span></td>" +
                         "</tr>" +
                     "</tbody>" +
                 "</table>" +
