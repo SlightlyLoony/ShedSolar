@@ -110,10 +110,6 @@ public class WebPageHandler extends AbstractHandler implements Handler {
         // TODO: light detector mode
         // TODO: heater controller (normal, battery only, etc.)
         // TODO: heater controller state
-        // TODO:
-        // TODO:
-        // TODO:
-        // TODO:
 
         // now send our page...
         _httpServletResponse.setContentType( "text/html" );
@@ -137,7 +133,8 @@ public class WebPageHandler extends AbstractHandler implements Handler {
             long onTime = Duration.between( _start, stop ).getSeconds();
 
             // make our pretty answer...
-            result = nowFormatter.format( _start ) + " for " + onTime + " seconds";
+            ZonedDateTime start = ZonedDateTime.ofInstant( _start, ZoneId.of( "America/Denver" ) );
+            result = nowFormatter.format( start ) + " for " + onTime + " seconds";
         }
 
         _page.set( _page.get().replace( _pattern, result ) );
