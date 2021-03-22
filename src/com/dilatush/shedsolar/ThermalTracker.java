@@ -16,6 +16,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static com.dilatush.shedsolar.Events.*;
+import static java.util.logging.Level.SEVERE;
 
 /**
  * Records battery and heater temperatures each time they're published, as well as heater on and off times, for each normal heater cycle, defined
@@ -106,42 +107,49 @@ public class ThermalTracker {
      */
     private void heaterOnImpl() {
 
-        // capture a precise start time (as finalizeRecording could take several seconds)...
-        Instant startTime = Instant.now( Clock.systemUTC() );
-        ZonedDateTime localStartTime = ZonedDateTime.ofInstant( startTime, ZoneId.of( "America/Denver" ) );
-
-        // if we have a recording underway, finalize it...
-        if( tracking.get() )
-            finalizeRecording();
-
-        LOGGER.log( Level.FINEST, () -> "Heater on: Tracking started" );
-
-        /* start up a new tracking session */
-
+        // catch any exceptions so that we don't kill our executor thread...
         try {
-            // set up our buffered writer...
-            DateTimeFormatter fileNameFormatter    = DateTimeFormatter.ofPattern( "yyyy-MM-dd_HH-mm-ss'.rec'" );
-            String fileName = fileNameFormatter.format( localStartTime );
-            file.set( new File( RECORDINGS_DIRECTORY + "/" + fileName ) );
-            LOGGER.log( Level.FINEST, () -> "File: " + file.get().getAbsolutePath() );
-            writer.set( new BufferedWriter( new OutputStreamWriter( new FileOutputStream( file.get() ), StandardCharsets.UTF_8 ) ) );
 
-            // write out the "heater on" record...
-            writeRecord(RecordType.ON, startTime, null );
+            // capture a precise start time (as finalizeRecording could take several seconds)...
+            Instant startTime = Instant.now( Clock.systemUTC() );
+            ZonedDateTime localStartTime = ZonedDateTime.ofInstant( startTime, ZoneId.of( "America/Denver" ) );
 
-            // indicate we are tracking...
-            tracking.set( true );
-            started.set( Instant.now( Clock.systemUTC() ) );
+            // if we have a recording underway, finalize it...
+            if( tracking.get() )
+                finalizeRecording();
 
-        } catch( IOException _e ) {
-            handleFileError( _e );
+            LOGGER.log( Level.FINEST, () -> "Heater on: Tracking started" );
+
+            /* start up a new tracking session */
+
+            try {
+                // set up our buffered writer...
+                DateTimeFormatter fileNameFormatter    = DateTimeFormatter.ofPattern( "yyyy-MM-dd_HH-mm-ss'.rec'" );
+                String fileName = fileNameFormatter.format( localStartTime );
+                file.set( new File( RECORDINGS_DIRECTORY + "/" + fileName ) );
+                LOGGER.log( Level.FINEST, () -> "File: " + file.get().getAbsolutePath() );
+                writer.set( new BufferedWriter( new OutputStreamWriter( new FileOutputStream( file.get() ), StandardCharsets.UTF_8 ) ) );
+
+                // write out the "heater on" record...
+                writeRecord(RecordType.ON, startTime, null );
+
+                // indicate we are tracking...
+                tracking.set( true );
+                started.set( Instant.now( Clock.systemUTC() ) );
+
+            } catch( IOException _e ) {
+                handleFileError( _e );
+            }
+        }
+        catch( Exception _exception ) {
+            LOGGER.log( SEVERE, "Unhandled exception: " + _exception.getMessage(), _exception );
         }
     }
 
 
     private void handleFileError( final IOException _e ) {
 
-        LOGGER.log( Level.SEVERE, "File error while writing thermal tracking information: " + _e.getMessage(), _e );
+        LOGGER.log( SEVERE, "File error while writing thermal tracking information: " + _e.getMessage(), _e );
 
         // make sure we've closed our writer and turned tracking off...
         try {
@@ -180,7 +188,8 @@ public class ThermalTracker {
             bw.write( ',' );
 
             // write out the timestamp...
-            bw.write( timestampFormatter.format( _timestamp ) );
+            ZonedDateTime localTimestamp = ZonedDateTime.ofInstant( _timestamp, ZoneId.of( "America/Denver" ) );
+            bw.write( timestampFormatter.format( localTimestamp ) );
 
             // if we have fields, write them out...
             if( _fields != null ) {
@@ -192,8 +201,12 @@ public class ThermalTracker {
             bw.newLine();
             bw.flush();
 
-        } catch (IOException _e) {
+        }
+        catch( IOException _e ) {
             handleFileError( _e );
+        }
+        catch( Exception _e ) {
+            LOGGER.log( SEVERE, "Unhandled exception: " + _e.getMessage(), _e );
         }
     }
 
@@ -266,30 +279,36 @@ public class ThermalTracker {
 
         LOGGER.log( Level.FINEST, () -> "Temperatures Read" );
 
-        // check to see if we've exceeded our three day limit...
-        if( Duration.between( started.get(), Instant.now( Clock.systemUTC() ) ).compareTo( Duration.ofDays( 3 ) ) > 0 ) {
+        try {
 
-            // shut our tracking down...
-            LOGGER.finest( "Shutting thermal tracking down because we hit the 3 day limit" );
+            // check to see if we've exceeded our three day limit...
+            if( Duration.between( started.get(), Instant.now( Clock.systemUTC() ) ).compareTo( Duration.ofDays( 3 ) ) > 0 ) {
 
-            // make sure we've closed our writer and turned tracking off...
-            try {
-                writer.get().close();
-            } catch (IOException e) {
-                // naught to do here, so just ignore the exception...
+                // shut our tracking down...
+                LOGGER.finest( "Shutting thermal tracking down because we hit the 3 day limit" );
+
+                // make sure we've closed our writer and turned tracking off...
+                try {
+                    writer.get().close();
+                } catch (IOException e) {
+                    // naught to do here, so just ignore the exception...
+                }
+                writer.set( null );
+                tracking.set( false );
+                return;
             }
-            writer.set( null );
-            tracking.set( false );
-            return;
-        }
 
-        // we ARE tracking, so let's get our temps and write the record...
-        String temps =
-                getTemp( shedSolar.batteryTemperature.getInfoSource() ) + ","
-                + getTemp( shedSolar.heaterTemperature.getInfoSource() ) + ","
-                + getTemp( shedSolar.ambientTemperature.getInfoSource() ) + ","
-                + getTemp( shedSolar.outsideTemperature.getInfoSource() );
-        writeRecord( RecordType.TEMP, Instant.now( Clock.systemUTC() ), temps );
+            // we ARE tracking, so let's get our temps and write the record...
+            String temps =
+                    getTemp( shedSolar.batteryTemperature.getInfoSource() ) + ","
+                    + getTemp( shedSolar.heaterTemperature.getInfoSource() ) + ","
+                    + getTemp( shedSolar.ambientTemperature.getInfoSource() ) + ","
+                    + getTemp( shedSolar.outsideTemperature.getInfoSource() );
+            writeRecord( RecordType.TEMP, Instant.now( Clock.systemUTC() ), temps );
+        }
+        catch( Exception _e ) {
+            LOGGER.log( SEVERE, "Unhandled exception: " + _e.getMessage(), _e );
+        }
     }
 
 
@@ -300,45 +319,51 @@ public class ThermalTracker {
 
         LOGGER.log( Level.FINEST, () -> "Finalizing recording" );
 
-        // close our writer...
         try {
-            writer.get().close();
-        }
-        catch( IOException _e ) {
-            LOGGER.log( Level.SEVERE, "Unexpected problem closing thermal tracking file: " + _e.getMessage(), _e );
-        }
 
-        // get things ready for the next cycle...
-        writer.set( null );
-        file.set( null );
-        tracking.set( false );
-
-        /* Now we make sure we're not accumulating too many records */
-
-        // get a list of the files in our recordings directory...
-        File recordings = new File( RECORDINGS_DIRECTORY );
-        File[] filesFound = recordings.listFiles();
-
-        // make sure we actually got a directory...
-        if( filesFound == null ) {
-            LOGGER.log( Level.SEVERE, "Recordings directory is not a directory" );
-            return;
-        }
-
-        // get the files into a list and sort them so the oldest are first on the list...
-        List<File> files = Arrays.asList( filesFound );
-        files.sort( Comparator.comparing( File::getName ) );
-
-        // now delete files as needed to get the number of files down to the maximum allowed...
-        while( files.size() > MAX_RECORDINGS ) {
-            if( files.get( 0 ).delete() )
-                files.remove( 0 );
-            else {
-                LOGGER.log( Level.SEVERE, "Could not delete " + files.get( 0 ).getName() );
-                break;
+            // close our writer...
+            try {
+                writer.get().close();
             }
-        }
+            catch( IOException _e ) {
+                LOGGER.log( SEVERE, "Unexpected problem closing thermal tracking file: " + _e.getMessage(), _e );
+            }
 
-        LOGGER.info( () -> "Number of thermal tracking files: " + files.size() );
+            // get things ready for the next cycle...
+            writer.set( null );
+            file.set( null );
+            tracking.set( false );
+
+            /* Now we make sure we're not accumulating too many records */
+
+            // get a list of the files in our recordings directory...
+            File recordings = new File( RECORDINGS_DIRECTORY );
+            File[] filesFound = recordings.listFiles();
+
+            // make sure we actually got a directory...
+            if( filesFound == null ) {
+                LOGGER.log( SEVERE, "Recordings directory is not a directory" );
+                return;
+            }
+
+            // get the files into a list and sort them so the oldest are first on the list...
+            List<File> files = Arrays.asList( filesFound );
+            files.sort( Comparator.comparing( File::getName ) );
+
+            // now delete files as needed to get the number of files down to the maximum allowed...
+            while( files.size() > MAX_RECORDINGS ) {
+                if( files.get( 0 ).delete() )
+                    files.remove( 0 );
+                else {
+                    LOGGER.log( SEVERE, "Could not delete " + files.get( 0 ).getName() );
+                    break;
+                }
+            }
+
+            LOGGER.info( () -> "Number of thermal tracking files: " + files.size() );
+        }
+        catch( Exception _e ) {
+            LOGGER.log( SEVERE, "Unhandled exception: " + _e.getMessage(), _e );
+        }
     }
 }
