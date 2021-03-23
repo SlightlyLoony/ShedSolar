@@ -109,19 +109,21 @@ public class WebPageHandler extends AbstractHandler implements Handler {
         fillLightMode(    page, "##light##",            light                            );
 
         if( outback.isInfoAvailable() ) {
-            fillInt(    page, "##soc##",      (int) Math.round( outback.getInfo().stateOfCharge                                                ) );
-            fillInt(    page, "##bc_pow##",   (int) Math.round( outback.getInfo().batteryChargePower                                           ) );
-            fillInt(    page, "##bd_pow##",   (int) Math.round( outback.getInfo().batteryDischargePower                                        ) );
-            fillInt(    page, "##bn_pow##",   (int) Math.round( outback.getInfo().batteryChargePower - outback.getInfo().batteryDischargePower ) );
-            fillInt(    page, "##inv_pow##",  (int) Math.round( outback.getInfo().inverterPower                                                ) );
-            fillFloat1( page, "##bat_volts##", outback.getInfo().batteryVoltage                                                                  );
+            fillInt(    page, "##soc##",         (int) Math.round( outback.getInfo().stateOfCharge                                                ) );
+            fillInt(    page, "##bc_pow##",      (int) Math.round( outback.getInfo().batteryChargePower                                           ) );
+            fillInt(    page, "##bd_pow##",      (int) Math.round( outback.getInfo().batteryDischargePower                                        ) );
+            fillInt(    page, "##bn_pow##",      (int) Math.round( outback.getInfo().batteryChargePower - outback.getInfo().batteryDischargePower ) );
+            fillInt(    page, "##inv_pow##",     (int) Math.round( outback.getInfo().inverterPower                                                ) );
+            fillFloat1( page, "##bat_volts##",   outback.getInfo().batteryVoltage                                                                   );
+            fillFloat1( page, "##panel_volts##", outback.getInfo().panelVoltage                                                                     );
         } else {
-            fillNotAvailable( page, "##soc##"       );
-            fillNotAvailable( page, "##bc_pow##"    );
-            fillNotAvailable( page, "##bd_pow##"    );
-            fillNotAvailable( page, "##bn_pow##"    );
-            fillNotAvailable( page, "##inv_pow##"   );
-            fillNotAvailable( page, "##bat_volts##" );
+            fillNotAvailable( page, "##soc##"         );
+            fillNotAvailable( page, "##bc_pow##"      );
+            fillNotAvailable( page, "##bd_pow##"      );
+            fillNotAvailable( page, "##bn_pow##"      );
+            fillNotAvailable( page, "##inv_pow##"     );
+            fillNotAvailable( page, "##bat_volts##"   );
+            fillNotAvailable( page, "##panel_volts##" );
         }
 
         // now send our page...
@@ -336,6 +338,11 @@ public class WebPageHandler extends AbstractHandler implements Handler {
                             "<td><span>Measured by the Outback FNDC</span></td>" +
                         "</tr>" +
                         "<tr>" +
+                            "<td><span>Solar Panel Voltage</span></td>" +
+                            "<td><span>##panel_volts## VDC</span></td>" +
+                            "<td><span>Measured by the Outback charge controller</span></td>" +
+                        "</tr>" +
+                        "<tr>" +
                             "<td><span>Solar Irradiance</span></td>" +
                             "<td><span>##solar_irr## watts/square meter</span></td>" +
                             "<td><span>Measured by the weather station</span></td>" +
@@ -343,16 +350,6 @@ public class WebPageHandler extends AbstractHandler implements Handler {
                         "<tr>" +
                             "<td><span>Light Mode</span></td>" +
                             "<td><span>##light##</span></td>" +
-                            "<td><span></span></td>" +
-                        "</tr>" +
-                        "<tr>" +
-                            "<td><span></span></td>" +
-                            "<td><span></span></td>" +
-                            "<td><span></span></td>" +
-                        "</tr>" +
-                        "<tr>" +
-                            "<td><span></span></td>" +
-                            "<td><span></span></td>" +
                             "<td><span></span></td>" +
                         "</tr>" +
                     "</tbody>" +
