@@ -188,6 +188,6 @@ public class EventSender extends Actor {
 
         mailbox.send( msg );
 
-        LOGGER.finest( () -> "Sent event: " + _type );
+        LOGGER.info( () -> "Sent event: " + _type );
     }
 }

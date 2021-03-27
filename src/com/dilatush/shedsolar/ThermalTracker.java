@@ -118,7 +118,7 @@ public class ThermalTracker {
             if( tracking.get() )
                 finalizeRecording();
 
-            LOGGER.log( Level.FINEST, () -> "Heater on: Tracking started" );
+            LOGGER.log( Level.INFO, () -> "Heater on: Tracking started" );
 
             /* start up a new tracking session */
 
@@ -317,7 +317,7 @@ public class ThermalTracker {
      */
     private void finalizeRecording() {
 
-        LOGGER.log( Level.FINEST, () -> "Finalizing recording" );
+        LOGGER.log( Level.INFO, () -> "Finalizing recording" );
 
         try {
 
