@@ -1,7 +1,7 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.mop.PostOffice;
-import com.dilatush.util.AConfig;
+import com.dilatush.util.config.AConfig;
 import com.dilatush.util.console.ConsoleServer;
 import com.dilatush.util.test.TestManager;
 

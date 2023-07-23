@@ -1,7 +1,7 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.util.AConfig;
 import com.dilatush.util.Haps;
+import com.dilatush.util.config.AConfig;
 import com.dilatush.util.info.Info;
 import com.dilatush.util.test.TestEnabler;
 import com.dilatush.util.test.TestManager;

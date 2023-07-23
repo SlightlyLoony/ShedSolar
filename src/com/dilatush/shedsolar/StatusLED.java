@@ -1,7 +1,7 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.util.AConfig;
 import com.dilatush.util.ScheduledExecutor;
+import com.dilatush.util.config.AConfig;
 import com.dilatush.util.info.InfoSource;
 import com.pi4j.io.gpio.GpioPinDigitalOutput;
 import com.pi4j.io.gpio.PinState;

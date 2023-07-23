@@ -1,8 +1,6 @@
 package com.dilatush.shedsolar;
 
 import com.dilatush.mop.PostOffice;
-import com.dilatush.util.AConfig;
-import com.dilatush.util.AConfig.InitResult;
 import com.dilatush.util.ExecutorService;
 import com.dilatush.util.Haps;
 import com.dilatush.util.ScheduledExecutor;
@@ -13,6 +11,7 @@ import com.dilatush.util.cli.ParsedCommandLine;
 import com.dilatush.util.cli.argdefs.OptArgDef;
 import com.dilatush.util.cli.argdefs.OptArgNames;
 import com.dilatush.util.cli.parsers.EnumerationParser;
+import com.dilatush.util.config.AConfig;
 import com.dilatush.util.console.ConsoleServer;
 import com.dilatush.util.info.Info;
 import com.dilatush.util.info.InfoView;
@@ -29,6 +28,7 @@ import static java.lang.Thread.sleep;
 /**
  * @author Tom Dilatush  tom@dilatush.com
  */
+@SuppressWarnings( { "FieldCanBeLocal", "unused" } )
 public class ShedSolar {
 
     public  static final ShedSolar instance = new ShedSolar();
@@ -143,27 +143,21 @@ public class ShedSolar {
 
         // are we running in assembly test mode or for reals?
         switch( mode ) {
-
-            case ASSEMBLY_TEST:
+            case ASSEMBLY_TEST -> {
                 LOGGER.info( "Running in assembly test mode" );
                 AssemblyTest at = new AssemblyTest();
                 at.run();
-                break;
-
-            case NORMAL:
+            }
+            case NORMAL -> {
                 LOGGER.info( "Running in production mode..." );
                 runNormal();
-                break;
-
-            case TEMPERATURE_TEST:
+            }
+            case TEMPERATURE_TEST -> {
                 LOGGER.info( "Running in temperature test mode..." );
                 TempTest tt = new TempTest( config );
                 tt.run();
-                break;
-
-            default:
-                LOGGER.severe( "Somehow we got an impossible mode..." );
-                break;
+            }
+            default -> LOGGER.severe( "Somehow we got an impossible mode..." );
         }
         // leaving this method doesn't shut down the process because the app starts at least one non-daemon thread...
     }

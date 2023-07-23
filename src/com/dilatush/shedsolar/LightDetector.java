@@ -1,10 +1,11 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.util.AConfig;
+import com.dilatush.util.config.AConfig;
 import com.dilatush.util.fsm.FSM;
 import com.dilatush.util.fsm.FSMSpec;
 import com.dilatush.util.fsm.FSMState;
 import com.dilatush.util.fsm.FSMTransition;
+import com.dilatush.util.fsm.events.FSMEvent;
 import com.dilatush.util.info.Info;
 import com.dilatush.util.info.InfoView;
 import org.shredzone.commons.suncalc.SunTimes;
@@ -70,7 +71,7 @@ public class LightDetector {
         // we're going to figure out whether we have light...
         boolean light;
 
-        // grab the information we're gonna need...
+        // grab the information we're going to need...
         Info<OutbackData> outback    = shedSolar.outback.getInfoSource();
         Info<Float>       irradiance = shedSolar.solarIrradiance.getInfoSource();
 
@@ -147,13 +148,13 @@ public class LightDetector {
 
 
     // on LIGHT:LOW_LIGHT to SHAKY_LIGHT...
-    private void onLightLowLight( final FSMTransition<State,Event> _transition ) {
+    private void onLightLowLight( final FSMTransition<State,Event> _transition, final FSMEvent<Event> _event ) {
         _transition.setTimeout( Event.DARK, Duration.ofMillis( config.interval * config.toDarkDelay ) );
     }
 
 
     // on DARK:GOOD_LIGHT to SHAKY_LIGHT...
-    private void onDarkGoodLight( final FSMTransition<State,Event> _transition ) {
+    private void onDarkGoodLight( final FSMTransition<State,Event> _transition, final FSMEvent<Event> _event ) {
         _transition.setTimeout( Event.LIGHT, Duration.ofMillis( config.interval * config.toLightDelay ) );
     }
 
@@ -189,7 +190,7 @@ public class LightDetector {
         boolean isDay = now.isAfter( sunrise ) && now.isBefore( sunset );
 
         assert( sunrise != null && sunset != null );
-        LOGGER.finest( () -> "Sunrise: " + sunrise.toString() + "; sunset: " + sunset.toString() + "; is " + (isDay ? "daytime" : "nighttime" ) );
+        LOGGER.finest( () -> "Sunrise: " + sunrise + "; sunset: " + sunset + "; is " + (isDay ? "daytime" : "nighttime" ) );
         return isDay;
     }
 

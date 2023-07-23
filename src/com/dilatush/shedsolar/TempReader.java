@@ -1,6 +1,6 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.util.AConfig;
+import com.dilatush.util.config.AConfig;
 import com.dilatush.util.info.Info;
 import com.dilatush.util.info.InfoView;
 import com.dilatush.util.noisefilter.ErrorCalc;

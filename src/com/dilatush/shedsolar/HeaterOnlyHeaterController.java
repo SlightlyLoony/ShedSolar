@@ -1,7 +1,7 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.util.AConfig;
 import com.dilatush.util.Haps;
+import com.dilatush.util.config.AConfig;
 import com.dilatush.util.fsm.FSM;
 import com.dilatush.util.fsm.FSMSpec;
 import com.dilatush.util.fsm.FSMState;
@@ -75,6 +75,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
      *
      * @param _context The heater controller context.
      */
+    @SuppressWarnings( "DuplicatedCode" )
     @Override
     public void tick( final HeaterControllerContext _context ) {
 
@@ -127,7 +128,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
     /*---------------------------*/
 
     // on OFF:LOW_BATTERY_TEMP -> CONFIRM_SSR_ON...
-    private void on_Off_LowBatteryTemp( final FSMTransition<State,Event> _transition ) {
+    private void on_Off_LowBatteryTemp( final FSMTransition<State,Event> _transition, final FSMEvent<Event> _event ) {
 
         LOGGER.finest( () -> "Heater-only heater controller OFF:LOW_BATTERY_TEMP" );
 
@@ -140,7 +141,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
 
 
     // on CONFIRM_SSR_ON:ON_SENSED -> CONFIRM_HEATER_ON...
-    private void on_ConfirmSSROn_OnSensed( final FSMTransition<State,Event> _transition ) {
+    private void on_ConfirmSSROn_OnSensed( final FSMTransition<State,Event> _transition, final FSMEvent<Event> _event ) {
 
         LOGGER.finest( () -> "Heater-only heater controller CONFIRM_SSR_ON:ON_SENSED" );
 
@@ -156,11 +157,11 @@ public class HeaterOnlyHeaterController implements HeaterController {
 
 
     // on CONFIRM_HEATER_ON:NO_TEMP_RISE -> HEATER_COOLING...
-    private void on_ConfirmHeaterOn_NoTempRise( final FSMTransition<State,Event> _transition ) {
+    private void on_ConfirmHeaterOn_NoTempRise( final FSMTransition<State,Event> _transition, final FSMEvent<Event> _event ) {
 
         LOGGER.finest( () -> "Heater-only heater controller CONFIRM_HEATER_ON:NO_TEMP_RISE" );
 
-        // turn off the heater, as we're gonna cool down for a while...
+        // turn off the heater, as we're going to cool down for a while...
         haps.post( Events.HEATER_NO_START );
         context.heaterOff.run();
 
@@ -175,7 +176,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
 
 
     // on CONFIRM_HEATER_ON:HEATER_TEMP_RISE -> ON...
-    private void on_ConfirmHeaterOn_HeaterTempRise( final FSMTransition<State,Event> _transition ) {
+    private void on_ConfirmHeaterOn_HeaterTempRise( final FSMTransition<State,Event> _transition, final FSMEvent<Event> _event ) {
 
         LOGGER.finest( () -> "Heater-only heater controller CONFIRM_HEATER_ON:HEATER_TEMP_RISE" );
 
@@ -189,7 +190,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
 
 
     // on CONFIRM_SSR_OFF:OFF_SENSED -> CONFIRM_HEATER_OFF...
-    private void on_ConfirmSSROff_OffSensed( final FSMTransition<State,Event> _transition ) {
+    private void on_ConfirmSSROff_OffSensed( final FSMTransition<State,Event> _transition, final FSMEvent<Event> _event ) {
 
         LOGGER.finest( () -> "Heater-only heater controller CONFIRM_SSR_OFF:OFF_SENSED" );
 
@@ -202,7 +203,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
 
 
     // on CONFIRM_HEATER_OFF:NO_TEMP_DROP -> COOLING...
-    private void on_ConfirmHeaterOff_NoTempDrop( final FSMTransition<State,Event> _transition ) {
+    private void on_ConfirmHeaterOff_NoTempDrop( final FSMTransition<State,Event> _transition, final FSMEvent<Event> _event ) {
 
         LOGGER.finest( () -> "Heater-only heater controller CONFIRM_HEATER_OFF:NO_TEMP_DROP" );
 
@@ -212,7 +213,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
 
 
     // on CONFIRM_HEATER_OFF:HEATER_TEMP_DROP -> COOLING...
-    private void on_ConfirmHeaterOff_HeaterTempDrop( final FSMTransition<State,Event> _transition ) {
+    private void on_ConfirmHeaterOff_HeaterTempDrop( final FSMTransition<State,Event> _transition, final FSMEvent<Event> _event ) {
 
         LOGGER.finest( () -> "Heater-only heater controller CONFIRM_HEATER_OFF:HEATER_TEMP_DROP" );
 
@@ -407,6 +408,7 @@ public class HeaterOnlyHeaterController implements HeaterController {
      *
      * @return the FSM created
      */
+    @SuppressWarnings( "DuplicatedCode" )
     private FSM<State,Event> createFSM() {
 
         FSMSpec<State,Event> spec = new FSMSpec<>( State.OFF, Event.COOLED );

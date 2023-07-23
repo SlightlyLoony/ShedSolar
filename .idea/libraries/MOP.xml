@@ -4,8 +4,8 @@
       <root url="jar://$PROJECT_DIR$/../MOP/out/artifacts/MOP.jar!/" />
     </CLASSES>
     <JAVADOC>
-      <root url="file://$PROJECT_DIR$/../MOP/javadocs" />
       <root url="file://$PROJECT_DIR$/../Util/docs" />
+      <root url="file://$PROJECT_DIR$/../MOP/docs" />
     </JAVADOC>
     <SOURCES />
   </library>

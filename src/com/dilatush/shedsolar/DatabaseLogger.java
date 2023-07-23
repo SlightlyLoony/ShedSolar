@@ -1,7 +1,7 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.util.AConfig;
 import com.dilatush.util.SimpleConnectionPool;
+import com.dilatush.util.config.AConfig;
 import com.dilatush.util.info.InfoSource;
 
 import java.sql.*;

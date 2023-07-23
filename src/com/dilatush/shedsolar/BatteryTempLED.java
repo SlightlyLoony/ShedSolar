@@ -1,6 +1,6 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.util.AConfig;
+import com.dilatush.util.config.AConfig;
 import com.pi4j.io.gpio.GpioPinDigitalOutput;
 import com.pi4j.io.gpio.PinState;
 import com.pi4j.io.gpio.RaspiPin;

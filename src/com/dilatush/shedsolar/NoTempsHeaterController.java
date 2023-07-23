@@ -1,6 +1,6 @@
 package com.dilatush.shedsolar;
 
-import com.dilatush.util.AConfig;
+import com.dilatush.util.config.AConfig;
 import com.dilatush.util.fsm.FSM;
 import com.dilatush.util.fsm.FSMSpec;
 import com.dilatush.util.fsm.FSMState;
@@ -113,7 +113,7 @@ public class NoTempsHeaterController implements HeaterController {
 
 
     // on CONFIRM_SSR_ON:ON_SENSED -> ON...
-    private void on_ConfirmSSROn_OnSensed( final FSMTransition<State,Event> _transition ) {
+    private void on_ConfirmSSROn_OnSensed( final FSMTransition<State,Event> _transition, final FSMEvent<Event> _event ) {
 
         LOGGER.finest( () -> "No-temps heater controller CONFIRM_SSR_ON:ON_SENSED" );
 
@@ -124,7 +124,7 @@ public class NoTempsHeaterController implements HeaterController {
 
 
     // on CONFIRM_SSR_OFF:OFF_SENSED -> WAIT_FOR_TRIGGER...
-    private void on_ConfirmSSROff_OffSensed( final FSMTransition<State,Event> _transition ) {
+    private void on_ConfirmSSROff_OffSensed( final FSMTransition<State,Event> _transition, final FSMEvent<Event> _event ) {
 
         LOGGER.finest( () -> "No-temps heater controller CONFIRM_SSR_OFF:OFF_SENSED" );
 
