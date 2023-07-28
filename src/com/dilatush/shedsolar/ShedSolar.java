@@ -2,6 +2,7 @@ package com.dilatush.shedsolar;
 
 import com.dilatush.mop.PostOffice;
 import com.dilatush.util.ExecutorService;
+import com.dilatush.util.Files;
 import com.dilatush.util.Haps;
 import com.dilatush.util.ScheduledExecutor;
 import com.dilatush.util.cli.CommandLine;
@@ -11,7 +12,6 @@ import com.dilatush.util.cli.ParsedCommandLine;
 import com.dilatush.util.cli.argdefs.OptArgDef;
 import com.dilatush.util.cli.argdefs.OptArgNames;
 import com.dilatush.util.cli.parsers.EnumerationParser;
-import com.dilatush.util.config.AConfig;
 import com.dilatush.util.console.ConsoleServer;
 import com.dilatush.util.info.Info;
 import com.dilatush.util.info.InfoView;
@@ -19,6 +19,7 @@ import com.dilatush.util.test.TestManager;
 import com.pi4j.io.gpio.GpioController;
 import com.pi4j.io.gpio.GpioFactory;
 
+import java.io.File;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -117,17 +118,28 @@ public class ShedSolar {
 
         LOGGER.info( "ShedSolar is starting..." );
 
+//        // get our configuration...
+//        InitResult ir = AConfig.init( Config.class, "configuration.js" );
+//
+//        // if our configuration is not valid, just get out of here...
+//        if( !ir.valid ) {
+//            LOGGER.severe( "Aborting; configuration is invalid" );
+//            System.exit( 1 );
+//        }
+//
+//        // get our actual configuration...
+//        config = (Config) ir.config;
+
         // get our configuration...
-        InitResult ir = AConfig.init( Config.class, "configuration.js" );
+        config = new Config();
+        var result = config.init( "ShedSolarConfigurator", "configuration.java", Files.readToString( new File( "credentials.txt" ) ) );
 
         // if our configuration is not valid, just get out of here...
-        if( !ir.valid ) {
-            LOGGER.severe( "Aborting; configuration is invalid" );
+        if( result.notOk() ) {
+            LOGGER.severe( "Aborting; configuration is invalid\n" + result.msg() );
             System.exit( 1 );
         }
 
-        // get our actual configuration...
-        config = (Config) ir.config;
 
         // start up our console server...
         consoleServer = new ConsoleServer( config.consoleServer );
