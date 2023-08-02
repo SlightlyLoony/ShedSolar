@@ -61,8 +61,6 @@ public class TempReader {
     // These values are derived from the MAX31855 specification...
     private final static int THERMOCOUPLE_MASK    = 0xFFFC0000;
     private final static int THERMOCOUPLE_OFFSET  = 18;
-    private final static int COLD_JUNCTION_MASK   = 0x0000FFF0;
-    private final static int COLD_JUNCTION_OFFSET = 4;
     private final static int IO_ERROR_MASK        = 0x00020000;
     private final static int SHORT_TO_VCC_MASK    = 0x00000004;
     private final static int SHORT_TO_GND_MASK    = 0x00000002;
@@ -152,8 +150,8 @@ public class TempReader {
              */
 
             // first we get the ambient temperature from each chip, and their average...
-            float ambientHeater =  ((rawHeater  & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f;
-            float ambientBattery = ((rawBattery & COLD_JUNCTION_MASK) >> COLD_JUNCTION_OFFSET) / 16.0f;
+            float ambientHeater =  extractAmbient( rawHeater );
+            float ambientBattery = extractAmbient( rawBattery );
             float ambientAverage = (ambientHeater + ambientBattery) / 2.0f;
 
             // now we see if they're reasonably close...
@@ -182,6 +180,13 @@ public class TempReader {
         catch( Exception _e ) {
             LOGGER.log( Level.SEVERE, "Unhandled exception when reading temperature", _e );
         }
+    }
+
+
+    private float extractAmbient( final int _raw ) {
+        var left = _raw << 16;   // get the 12 bits of cold junction data in the MSBs...
+        var right = left >> 20;  // get the 12 bits of cold junction data in the LSBs, preserving the sign...
+        return right / 16.0f;  // return the data, scaled by 2^4...
     }
 
 
@@ -438,7 +443,7 @@ public class TempReader {
         }
 
 
-        // returns true if any field in this instance is different than a field in the given instance...
+        // returns true if any field in this instance is different from a field in the given instance...
         private boolean changed( final TempSensorStatus _other ) {
             return (sensorProblem ^ _other.sensorProblem) || (ioError ^ _other.ioError) || (open ^ _other.open)
                     || (shortToVCC ^ _other.shortToVCC) || (shortToGnd ^ _other.shortToGnd);

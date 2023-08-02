@@ -26,8 +26,10 @@ ssh tom@shedsolar << RUN_ON_ShedSolar2
 cd /apps/shedsolar
 sudo chown tom:tom ShedSolar.jar
 sudo chmod ug+xrw ShedSolar.jar
-sudo chown tom:tom configuration.js
-sudo chmod ug+xrw configuration.js
+sudo chown tom:tom configuration.java
+sudo chmod ug+xrw configuration.java
+sudo chown tom:tom credentials.txt
+sudo chmod ug+xrw credentials.txt
 sudo chown tom:tom logging.properties
 sudo chmod ug+xrw logging.properties
 sudo chown tom:tom run.bash

@@ -91,8 +91,10 @@ public class ShedSolar {
         System.getProperties().setProperty( "java.util.logging.config.file", "logging.properties" );
         LOGGER = Logger.getLogger( new Object(){}.getClass().getEnclosingClass().getSimpleName() );
 
-        // set up a scheduled executor service for all to use, in a non-daemon thread...
-        scheduledExecutor = new ScheduledExecutor( false );
+        // set up a scheduled executor service for all to use, in several normal (non-daemon) threads...
+        var threads = 4;
+        var daemon = false;
+        scheduledExecutor = new ScheduledExecutor( threads, daemon );
 
         // set up an executor service for all to use, in a non-daemon thread...
         executor = new ExecutorService( 2, 10 );

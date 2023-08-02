@@ -13,8 +13,10 @@ import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static com.dilatush.util.Conversions.fromFtoC;
+
 /**
- * Provides an MOP actor that provides the mailbox "shedsolar.main" and listens for once-per-minute weather reports.  Additionally this class checks
+ * Provides an MOP actor that provides the mailbox "shedsolar.main" and listens for once-per-minute weather reports.  Additionally, this class checks
  * to see that weather reports are actually received.  If they fail for some reason, a WeatherFailure event is published periodically.
  *
  * @author Tom Dilatush  tom@dilatush.com
@@ -54,14 +56,28 @@ public class ShedSolarActor extends Actor {
 
         // register our handlers...
         registerFQPublishMessageHandler( this::handleWeatherReport, "weather.weather", "minute", "report" );
+        registerPublishMessageHandler(   this::handleYoLinkReport,  "yolink", "monitor" );
 
         // subscribe to the messages we want to monitor...
-        mailbox.subscribe( "weather.weather", "minute.report" );
+        mailbox.subscribe( "beast.monitor",   "yolink.monitor" );
+        mailbox.subscribe( "weather.weather", "minute.report"  );
     }
 
 
     private void startChecker() {
         checker = ShedSolar.instance.scheduledExecutor.schedule( this::check, Duration.ofMillis( MAX_WEATHER_REPORT_DELAY ) );
+    }
+
+
+    private void handleYoLinkReport( final Message _message ) {
+        var deckTemp     = _message.getFloatDotted( "monitor.yolink.sensors.Deck.temperature" );
+        var pinesTemp    = _message.getFloatDotted( "monitor.yolink.sensors.Pines.temperature" );
+        var shedDoorTemp = _message.getFloatDotted( "monitor.yolink.sensors.Shed Door.temperature" );
+        var avgTemp = (deckTemp + pinesTemp + shedDoorTemp ) / 3.0f;
+        registerOutsideTemp( (float) fromFtoC( deckTemp ),     15 );
+        registerOutsideTemp( (float) fromFtoC( pinesTemp ),    15 );
+        registerOutsideTemp( (float) fromFtoC( shedDoorTemp ), 15 );
+        LOGGER.info( String.format( "YoLink message: average outside temperature is %.1fC", fromFtoC( avgTemp ) ));
     }
 
 
@@ -85,7 +101,7 @@ public class ShedSolarActor extends Actor {
 
             // publish our data...
             solarIrradianceSetter.accept( solar );
-            outsideTemperatureSetter.accept( temp );
+            registerOutsideTemp( temp, 1 );
 
             // start a new checker...
             startChecker();
@@ -95,6 +111,20 @@ public class ShedSolarActor extends Actor {
         }
     }
 
+
+    private void registerOutsideTemp( final float _temp, final int _minutes ) {
+
+        // if we have no temperature yet, just set it with the value we've just received...
+        if( !outsideTemperature.isInfoAvailable() ) {
+            outsideTemperatureSetter.accept( _temp );
+            return;
+        }
+
+        // otherwise, calculate our new average...
+        var temp = outsideTemperature.getInfo();
+        temp = (((60 - _minutes) * temp) + (_minutes * _temp)) / 60.0f;
+        outsideTemperatureSetter.accept( temp );
+    }
 
 
     private void check() {
@@ -106,17 +136,7 @@ public class ShedSolarActor extends Actor {
         // check again...
         startChecker();
 
-
-        // a little problem analysis here...
-        // if we've lost connection to the post office, publish an event to that effect...
-        if( !ShedSolar.instance.isPostOfficeConnected() ) {
-            ShedSolar.instance.haps.post( Events.CPO_DOWN );
-            LOGGER.warning( "CPO not connected" );
-        }
-
-        // otherwise, try re-subscribing...
-        else {
-            mailbox.subscribe( "weather.weather", "minute.report" );
-        }
+        // try re-subscribing...
+        mailbox.subscribe( "weather.weather", "minute.report" );
     }
 }

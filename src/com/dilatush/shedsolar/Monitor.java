@@ -1,13 +1,13 @@
 package com.dilatush.shedsolar;
 
+import com.dilatush.monitor.monitors.JVM;
 import com.dilatush.mop.Actor;
 import com.dilatush.mop.Message;
 import com.dilatush.mop.PostOffice;
-import com.dilatush.mop.util.JVMMonitor;
-import com.dilatush.mop.util.OSMonitor;
 import com.dilatush.util.info.InfoSource;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -22,9 +22,6 @@ public class Monitor extends Actor {
 
     private final static String MAILBOX_NAME = "monitor";
 
-    private final OSMonitor osMonitor;
-    private final JVMMonitor jvmMonitor;
-
     // some shortcut aliases...
     private final ShedSolar ss;
 
@@ -35,9 +32,11 @@ public class Monitor extends Actor {
         // set up our aliases...
         ss = ShedSolar.instance;
 
-        // set up our monitors for the OS and the JVM...
-        osMonitor = new OSMonitor();
-        jvmMonitor = new JVMMonitor();
+        // set up our JVM monitor...
+        var params = new HashMap<String,Object>();
+        params.put( "name", "shedsolar_shedsolar" );
+        var jvm = new JVM( mailbox, params, Duration.ofMinutes( 10 ) );
+        ss.scheduledExecutor.scheduleAtFixedRate( jvm, Duration.ofSeconds( 5 ), Duration.ofMinutes( 10 ) );
 
         // start our monitoring schedule, in a worker thread...
         ss.scheduledExecutor.scheduleAtFixedRate(
@@ -56,8 +55,6 @@ public class Monitor extends Actor {
         Message msg = mailbox.createPublishMessage( "shedsolar.monitor" );
 
         // run our monitors and fill in the info...
-        osMonitor.fill( msg );
-        jvmMonitor.fill( msg );
         fill( msg );
 
         // publish the message...
@@ -74,18 +71,37 @@ public class Monitor extends Actor {
      */
     private void fill( final Message _msg ) {
 
+        // send the message interval...
+        _msg.putDotted( "monitor.shedsolar.messageIntervalMs", Duration.ofMinutes( 1 ).toMillis() );
+
         // gather the information we're going to monitor (state of charge and battery temperature)...
         InfoSource<Float> batteryData       = ss.batteryTemperature.getInfoSource();
+        InfoSource<Float> heaterData        = ss.heaterTemperature.getInfoSource();
+        InfoSource<Float> ambientData       = ss.ambientTemperature.getInfoSource();
+        InfoSource<Float> outsideData       = ss.outsideTemperature.getInfoSource();
         InfoSource<OutbackData> outbackData = ss.outback.getInfoSource();
-        boolean batteryAvailable            = batteryData.isInfoAvailable();
-        boolean socAvailable                = outbackData.isInfoAvailable();
-        float batteryTemp                   = batteryAvailable ? batteryData.getInfo() : 0;
-        float soc                           = socAvailable ? (float) outbackData.getInfo().stateOfCharge : 0;
+        InfoSource<LightDetector.Mode> mode = ss.light.getInfoSource();
 
-        // now fill in the message fields...
-        _msg.putDotted( "monitor.shedsolar.batteryAvailable",   batteryAvailable );
-        _msg.putDotted( "monitor.shedsolar.socAvailable",       socAvailable     );
-        _msg.putDotted( "monitor.shedsolar.batteryTemperature", batteryTemp      );
-        _msg.putDotted( "monitor.shedsolar.soc",                soc              );
+        // now fill in the message fields for which we have data...
+        if( batteryData.isInfoAvailable() )
+            _msg.putDotted( "monitor.shedsolar.batteryTemperature", batteryData.getInfo()                       );
+        if( heaterData.isInfoAvailable() )
+            _msg.putDotted( "monitor.shedsolar.heaterTemperature",  heaterData.getInfo()                        );
+        if( ambientData.isInfoAvailable() )
+            _msg.putDotted( "monitor.shedsolar.ambientTemperature", ambientData.getInfo()                       );
+        if( outsideData.isInfoAvailable() )
+            _msg.putDotted( "monitor.shedsolar.outsideTemperature", outsideData.getInfo()                       );
+        if( mode.isInfoAvailable() )
+            _msg.putDotted( "monitor.shedsolar.mode", mode.getInfo().toString()                                 );
+        if( outbackData.isInfoAvailable() ) {
+            var oi = outbackData.getInfo();
+            _msg.putDotted( "monitor.shedsolar.soc",                   (float) oi.stateOfCharge                                 );
+            _msg.putDotted( "monitor.shedsolar.batteryChargePower",    (float) oi.batteryChargePower                            );
+            _msg.putDotted( "monitor.shedsolar.batteryDischargePower", (float) oi.batteryDischargePower                         );
+            _msg.putDotted( "monitor.shedsolar.batteryNetPower",       (float) oi.batteryChargePower - oi.batteryDischargePower );
+            _msg.putDotted( "monitor.shedsolar.inverterOutputPower",   (float) oi.inverterPower                                 );
+            _msg.putDotted( "monitor.shedsolar.batteryVoltage",        (float) oi.batteryVoltage                                );
+            _msg.putDotted( "monitor.shedsolar.solarPanelVoltage",     (float) oi.panelVoltage                                  );
+        }
     }
 }

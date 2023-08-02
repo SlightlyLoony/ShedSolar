@@ -12,5 +12,6 @@
     <orderEntry type="library" name="MOP" level="project" />
     <orderEntry type="library" name="mysql-connector-java-8.0.12" level="project" />
     <orderEntry type="library" name="jetty-all-9.4.38.v20210224-uber" level="project" />
+    <orderEntry type="library" name="JVMMonitor" level="project" />
   </component>
 </module>
