@@ -135,8 +135,5 @@ public class ShedSolarActor extends Actor {
 
         // check again...
         startChecker();
-
-        // try re-subscribing...
-        mailbox.subscribe( "weather.weather", "minute.report" );
     }
 }
